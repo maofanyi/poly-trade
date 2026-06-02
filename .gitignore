@@ -14,6 +14,8 @@ ta_results*.json
 *.png
 *.json
 TradingAgents/
+poly_data/
 test_yf.json
 tradingagents_input_2026-06-01.json
 .claude/
+nohup.out

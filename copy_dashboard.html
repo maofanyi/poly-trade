@@ -299,6 +299,8 @@ async function addWallet(addr, name, cat) {
   renderDiscoverTable();
   const ok = await syncToServer(active);
   showToast(ok ? '已添加: ' + name + ' (生效中)' : '已添加: ' + name + ' (需重启监控)');
+  // Immediately refresh monitor view
+  refresh();
 }
 
 async function removeWallet(addr) {
@@ -307,6 +309,17 @@ async function removeWallet(addr) {
   renderDiscoverTable();
   const ok = await syncToServer(active);
   showToast(ok ? '已移除 (生效中)' : '已移除 (需重启监控)');
+  refresh();
+}
+
+async function removeWalletMonitor(name) {
+  const active = getActive().filter(w => w.name !== name);
+  saveActive(active);
+  const ok = await syncToServer(active);
+  showToast(ok ? '已停止跟单: ' + name : '已移除: ' + name);
+  // Update both tabs
+  renderDiscoverTable();
+  refresh();
 }
 
 // ===== TABS =====
@@ -432,7 +445,10 @@ function render(state) {
     tradeHtml += `<div class="trade-card">
       <div class="trade-card-header">
         <span class="trade-card-name">${w.name} <span style="color:var(--muted);font-weight:400;font-size:10px;">${metaStr}</span></span>
-        <span class="cat-tag ${(w.cat||'Weather')[0].toLowerCase()}">${CAT_NAMES[w.cat]||w.cat}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span class="cat-tag ${(w.cat||'Weather')[0].toLowerCase()}">${CAT_NAMES[w.cat]||w.cat}</span>
+          <button class="btn-xs remove" onclick="removeWalletMonitor('${w.name}')" title="停止跟单" style="font-size:9px;">✕</button>
+        </span>
       </div>
       <div class="trade-card-body">`;
     if (wt.length===0) tradeHtml += `<div class="empty">等待新交易...<br><span style="font-size:9px;color:var(--muted)">监控自 ${state.monitor_start||'启动'}</span></div>`;

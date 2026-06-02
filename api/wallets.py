@@ -11,6 +11,7 @@ def _row_to_out(row, pnl_row=None) -> dict:
     return {
         "id": row["id"], "address": row["address"], "name": row["name"],
         "category": row["category"], "active": bool(row["active"]),
+        "paused": bool(row["paused"]) if "paused" in row.keys() else False,
         "created_at": row["created_at"],
         "cash": pnl_row["cash"] if pnl_row else INITIAL_CAPITAL,
         "total_value": pnl_row["total_value"] if pnl_row else INITIAL_CAPITAL,
@@ -62,6 +63,20 @@ def remove_wallet(wallet_id: int):
     db.execute("UPDATE wallets SET active = 0 WHERE id = ?", (wallet_id,))
     db.commit()
     return {"ok": True, "name": row["name"]}
+
+@router.post("/{wallet_id}/pause")
+def pause_wallet(wallet_id: int):
+    db = get_db()
+    db.execute("UPDATE wallets SET paused = 1 WHERE id = ?", (wallet_id,))
+    db.commit()
+    return {"ok": True}
+
+@router.post("/{wallet_id}/resume")
+def resume_wallet(wallet_id: int):
+    db = get_db()
+    db.execute("UPDATE wallets SET paused = 0 WHERE id = ?", (wallet_id,))
+    db.commit()
+    return {"ok": True}
 
 @router.get("/{wallet_id}/pnl")
 def get_wallet_pnl_history(wallet_id: int, days: int = 7):

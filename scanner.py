@@ -62,6 +62,12 @@ def snapshot_pnl(db, wallet_id: int, acct_name: str):
     """, (wallet_id, cash_val, total_val, pnl_val, pnl_pct))
     db.commit()
 
+    # Auto-pause if loss exceeds 25%
+    if pnl_pct <= -25:
+        db.execute("UPDATE wallets SET paused = 1 WHERE id = ?", (wallet_id,))
+        db.commit()
+        print(f"    ⚠️ {acct_name} paused: loss {pnl_pct:.1f}% exceeds threshold")
+
 def _extract_expiry(slug: str) -> int | None:
     """Try to extract market expiry timestamp from slug. Returns Unix timestamp or None."""
     # Pattern: ends with a 10-digit Unix timestamp (2020–2033 range)
@@ -97,6 +103,11 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
     wallet_id = get_wallet_id(db, wallet['name'])
     if not wallet_id:
         return 0
+
+    # Check if wallet is paused
+    paused_row = db.execute("SELECT paused FROM wallets WHERE id = ?", (wallet_id,)).fetchone()
+    if paused_row and paused_row['paused']:
+        return 0  # Skip this wallet entirely
 
     try:
         trades = api_fetch(f"{DATA_API}/trades?user={wallet['address']}&limit=15")

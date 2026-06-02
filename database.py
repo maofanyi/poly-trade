@@ -36,6 +36,7 @@ def init_db():
             name TEXT NOT NULL,
             category TEXT DEFAULT 'Unknown',
             active INTEGER DEFAULT 1,
+            paused INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now','localtime'))
         );
 
@@ -120,3 +121,12 @@ def init_db():
         );
     """)
     db.commit()
+    migrate()
+
+def migrate():
+    """Add any missing columns (idempotent)."""
+    db = get_db()
+    cols = [r[1] for r in db.execute("PRAGMA table_info(wallets)").fetchall()]
+    if 'paused' not in cols:
+        db.execute("ALTER TABLE wallets ADD COLUMN paused INTEGER DEFAULT 0")
+        db.commit()

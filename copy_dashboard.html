@@ -461,12 +461,14 @@ function render(state) {
   // Active wallet names (used by both P&L and trade cards)
   const activeNames = new Set(getActive().map(w => w.name));
 
-  // Pre-compute activity: wallet is active if it has P&L change OR sim_trades
+  // Pre-compute activity: wallet is active if P&L changed OR has FILLED trades (not just SKIPPED)
   const activeSet = new Set();
   Object.entries(walletPnl).forEach(([name, p]) => {
     if (Math.abs((p.total_value||500) - 500) > 0.05) activeSet.add(name);
   });
-  simTrades.forEach(t => { if (t.wallet) activeSet.add(t.wallet); });
+  simTrades.forEach(t => {
+    if (t.wallet && t.status === 'FILLED') activeSet.add(t.wallet);
+  });
 
   // P&L Cards — only wallets with actual trade activity
   const sortedPnl = Object.entries(walletPnl)

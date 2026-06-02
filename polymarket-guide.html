@@ -1,0 +1,2645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>预测市场 & 美股量化交易机器人完全指南 — Polymarket · AI Trading · GitHub 生态</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700;900&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ========== CSS Variables ========== */
+:root {
+  --bg-primary: #0a0e14;
+  --bg-secondary: #0f151c;
+  --bg-card: #141b24;
+  --bg-card-hover: #1a2330;
+  --bg-terminal: #0c1117;
+  --border: #1e2a36;
+  --border-light: #2a3a4a;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b9aad;
+  --text-muted: #5a6b7d;
+  --accent-green: #00e676;
+  --accent-green-dim: #00c853;
+  --accent-red: #ff3d4f;
+  --accent-red-dim: #d32f3e;
+  --accent-amber: #ffab00;
+  --accent-blue: #448aff;
+  --accent-cyan: #00bcd4;
+  --accent-purple: #bb86fc;
+  --glow-green: 0 0 20px rgba(0, 230, 118, 0.3);
+  --glow-red: 0 0 20px rgba(255, 61, 79, 0.3);
+  --glow-blue: 0 0 20px rgba(68, 138, 255, 0.3);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ========== Reset & Base ========== */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+
+body {
+  font-family: 'Noto Sans SC', -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.7;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ========== Background Effects ========== */
+.bg-grid {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(0, 230, 118, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 230, 118, 0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+.bg-noise {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+}
+
+/* ========== Top Bar ========== */
+.top-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan), var(--accent-blue), var(--accent-purple));
+  z-index: 1000;
+  animation: gradientShift 8s ease infinite;
+  background-size: 200% 100%;
+}
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ========== Ticker ========== */
+.ticker-wrap {
+  position: fixed;
+  top: 3px;
+  left: 0; right: 0;
+  height: 32px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  z-index: 999;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.ticker {
+  display: flex;
+  gap: 48px;
+  animation: ticker 60s linear infinite;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.ticker-item .price { color: var(--accent-green); font-weight: 600; }
+.ticker-item .change-up { color: var(--accent-green); }
+.ticker-item .change-down { color: var(--accent-red); }
+.ticker-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); animation: pulse-dot 2s ease infinite; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ========== Sidebar ========== */
+.sidebar {
+  position: fixed;
+  top: 35px;
+  left: 0;
+  width: 260px;
+  height: calc(100vh - 35px);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  z-index: 100;
+  overflow-y: auto;
+  padding: 24px 16px;
+  transition: transform var(--transition);
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+.sidebar-logo {
+  font-family: 'Orbitron', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-green);
+  text-align: center;
+  margin-bottom: 24px;
+  letter-spacing: 2px;
+  text-shadow: var(--glow-green);
+}
+
+.sidebar-section {
+  margin-bottom: 6px;
+}
+
+.sidebar-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  transition: all var(--transition);
+  border-left: 2px solid transparent;
+}
+
+.sidebar-link:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-left-color: var(--accent-green);
+}
+
+.sidebar-link.active {
+  background: var(--bg-card);
+  color: var(--accent-green);
+  border-left-color: var(--accent-green);
+}
+
+.sidebar-link .icon { font-size: 16px; width: 20px; text-align: center; }
+
+/* ========== Main Content ========== */
+.main-content {
+  margin-left: 260px;
+  margin-top: 35px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ========== Hero ========== */
+.hero {
+  position: relative;
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 80px 40px;
+  overflow: hidden;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(0, 230, 118, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 80%, rgba(68, 138, 255, 0.05) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 50%, rgba(187, 134, 252, 0.04) 0%, transparent 70%);
+}
+
+.hero-content { position: relative; z-index: 1; max-width: 900px; }
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 230, 118, 0.1);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+  padding: 8px 20px;
+  border-radius: 100px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--accent-green);
+  margin-bottom: 32px;
+  animation: fadeInUp 0.6s ease;
+}
+
+.hero-badge .live-dot {
+  width: 8px; height: 8px;
+  background: var(--accent-green);
+  border-radius: 50%;
+  animation: pulse-dot 1.5s ease infinite;
+}
+
+.hero h1 {
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 900;
+  line-height: 1.2;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, #fff 0%, #a0d0b0 30%, var(--accent-green) 60%, var(--accent-cyan) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: fadeInUp 0.6s ease 0.1s both;
+}
+
+.hero p {
+  font-size: 18px;
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin: 0 auto 40px;
+  animation: fadeInUp 0.6s ease 0.2s both;
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  flex-wrap: wrap;
+  animation: fadeInUp 0.6s ease 0.3s both;
+}
+
+.hero-stat {
+  text-align: center;
+}
+
+.hero-stat-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--accent-green);
+  text-shadow: var(--glow-green);
+}
+
+.hero-stat-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.hero-scroll {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  animation: bounce 2s ease infinite;
+  color: var(--text-muted);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-10px); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ========== Sections ========== */
+.section {
+  padding: 80px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.section-header {
+  margin-bottom: 48px;
+}
+
+.section-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--accent-green);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: clamp(28px, 3.5vw, 42px);
+  font-weight: 900;
+  margin-bottom: 12px;
+  position: relative;
+  display: inline-block;
+}
+
+.section-title::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 60px;
+  height: 3px;
+  background: var(--accent-green);
+  border-radius: 2px;
+}
+
+.section-desc {
+  color: var(--text-secondary);
+  font-size: 16px;
+  max-width: 700px;
+}
+
+/* ========== Cards ========== */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-green), transparent);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.card:hover {
+  border-color: var(--border-light);
+  background: var(--bg-card-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.card:hover::before { opacity: 1; }
+
+.card-icon {
+  font-size: 32px;
+  margin-bottom: 16px;
+}
+
+.card h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.card p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.card-tag {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  margin-top: 12px;
+}
+
+.tag-green { background: rgba(0,230,118,0.1); color: var(--accent-green); border: 1px solid rgba(0,230,118,0.2); }
+.tag-red { background: rgba(255,61,79,0.1); color: var(--accent-red); border: 1px solid rgba(255,61,79,0.2); }
+.tag-amber { background: rgba(255,171,0,0.1); color: var(--accent-amber); border: 1px solid rgba(255,171,0,0.2); }
+.tag-blue { background: rgba(68,138,255,0.1); color: var(--accent-blue); border: 1px solid rgba(68,138,255,0.2); }
+
+/* ========== Architecture Diagram ========== */
+.arch-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px 0;
+  flex-wrap: wrap;
+}
+
+.arch-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 160px;
+}
+
+.arch-layer-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.arch-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all var(--transition);
+}
+
+.arch-box:hover {
+  border-color: var(--accent-green);
+  box-shadow: var(--glow-green);
+}
+
+.arch-box.data { border-left: 3px solid var(--accent-blue); }
+.arch-box.reason { border-left: 3px solid var(--accent-purple); }
+.arch-box.exec { border-left: 3px solid var(--accent-green); }
+
+.arch-arrow {
+  font-size: 24px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ========== Tables ========== */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+thead {
+  background: var(--bg-terminal);
+}
+
+th {
+  padding: 14px 18px;
+  text-align: left;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 2px solid var(--border);
+}
+
+td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+tr:last-child td { border-bottom: none; }
+
+tr:hover td {
+  background: rgba(0, 230, 118, 0.03);
+}
+
+.profit { color: var(--accent-green); font-weight: 600; }
+.loss { color: var(--accent-red); font-weight: 600; }
+.winrate { font-family: 'JetBrains Mono', monospace; }
+
+.stars { color: var(--accent-amber); font-family: 'JetBrains Mono', monospace; }
+
+.tag-sm {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 100px;
+  font-weight: 600;
+}
+
+.tag-official { background: rgba(0,230,118,0.12); color: var(--accent-green); border: 1px solid rgba(0,230,118,0.3); }
+.tag-community { background: rgba(68,138,255,0.12); color: var(--accent-blue); border: 1px solid rgba(68,138,255,0.3); }
+
+/* ========== Formula Box ========== */
+.formula-box {
+  background: var(--bg-terminal);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  font-family: 'JetBrains Mono', monospace;
+  text-align: center;
+  margin: 24px 0;
+}
+
+.formula-box .label {
+  color: var(--text-muted);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.formula-box .formula {
+  font-size: 18px;
+  color: var(--accent-amber);
+  margin-bottom: 12px;
+}
+
+.formula-box .result {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ========== Stat Cards Row ========== */
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 32px 0;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  text-align: center;
+  transition: all var(--transition);
+}
+
+.stat-card:hover {
+  border-color: var(--border-light);
+  transform: translateY(-2px);
+}
+
+.stat-card .value {
+  font-family: 'Orbitron', monospace;
+  font-size: 32px;
+  font-weight: 900;
+  margin-bottom: 4px;
+}
+
+.stat-card .value.green { color: var(--accent-green); text-shadow: var(--glow-green); }
+.stat-card .value.red { color: var(--accent-red); text-shadow: var(--glow-red); }
+.stat-card .value.amber { color: var(--accent-amber); }
+.stat-card .value.blue { color: var(--accent-blue); text-shadow: var(--glow-blue); }
+
+.stat-card .label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ========== Alert Box ========== */
+.alert {
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
+  margin: 24px 0;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.alert-warning {
+  background: rgba(255, 171, 0, 0.08);
+  border: 1px solid rgba(255, 171, 0, 0.2);
+}
+
+.alert-danger {
+  background: rgba(255, 61, 79, 0.08);
+  border: 1px solid rgba(255, 61, 79, 0.2);
+}
+
+.alert-info {
+  background: rgba(68, 138, 255, 0.08);
+  border: 1px solid rgba(68, 138, 255, 0.2);
+}
+
+.alert-success {
+  background: rgba(0, 230, 118, 0.08);
+  border: 1px solid rgba(0, 230, 118, 0.2);
+}
+
+.alert-icon { font-size: 20px; flex-shrink: 0; }
+
+.alert-content h4 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.alert-content p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ========== Timeline ========== */
+.timeline {
+  position: relative;
+  padding-left: 30px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--accent-green), var(--accent-blue), var(--accent-purple));
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 32px;
+  padding-left: 24px;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -26px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: var(--glow-green);
+}
+
+.timeline-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--accent-green);
+  margin-bottom: 4px;
+}
+
+.timeline-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.timeline-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ========== Code Block ========== */
+.code-block {
+  background: var(--bg-terminal);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin: 20px 0;
+}
+
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.code-lang {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--accent-green);
+  letter-spacing: 1px;
+}
+
+.code-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.code-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+
+.code-dot:nth-child(1) { background: #ff5f56; }
+.code-dot:nth-child(2) { background: #ffbd2e; }
+.code-dot:nth-child(3) { background: #27c93f; }
+
+.code-block pre {
+  padding: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  overflow-x: auto;
+  margin: 0;
+}
+
+.code-block .keyword { color: #c792ea; }
+.code-block .string { color: #c3e88d; }
+.code-block .comment { color: #546e7a; }
+.code-block .func { color: #82aaff; }
+.code-block .number { color: #f78c6c; }
+
+/* ========== Strategy Cards ========== */
+.strategy-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  margin-bottom: 16px;
+  transition: all var(--transition);
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.strategy-card:hover {
+  border-color: var(--border-light);
+  background: var(--bg-card-hover);
+}
+
+.strategy-rank {
+  font-family: 'Orbitron', monospace;
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--accent-green);
+  min-width: 44px;
+  text-shadow: var(--glow-green);
+}
+
+.strategy-body h4 {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.strategy-body p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.strategy-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.strategy-meta-item {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.strategy-meta-item strong {
+  color: var(--text-primary);
+}
+
+/* ========== Resource Links ========== */
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.resource-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  text-decoration: none;
+  color: inherit;
+  transition: all var(--transition);
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.resource-card:hover {
+  border-color: var(--accent-green);
+  background: var(--bg-card-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--glow-green);
+}
+
+.resource-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.resource-info h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.resource-info p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ========== Footer ========== */
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 48px 40px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.footer-disclaimer {
+  max-width: 700px;
+  margin: 0 auto 20px;
+  padding: 20px;
+  background: rgba(255, 171, 0, 0.05);
+  border: 1px solid rgba(255, 171, 0, 0.15);
+  border-radius: var(--radius-md);
+}
+
+/* ========== Mobile Nav ========== */
+.mobile-nav-toggle {
+  display: none;
+  position: fixed;
+  top: 40px;
+  right: 16px;
+  z-index: 200;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 900px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .main-content {
+    margin-left: 0;
+  }
+
+  .mobile-nav-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .section {
+    padding: 60px 20px;
+  }
+
+  .hero {
+    padding: 60px 20px;
+    min-height: 60vh;
+  }
+
+  .hero-stats {
+    gap: 20px;
+  }
+
+  .hero-stat-value {
+    font-size: 24px;
+  }
+
+  .arch-diagram {
+    flex-direction: column;
+  }
+
+  .arch-arrow {
+    transform: rotate(90deg);
+  }
+
+  .strategy-card {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  table {
+    font-size: 12px;
+  }
+
+  th, td {
+    padding: 10px 12px;
+  }
+}
+
+/* ========== Print ========== */
+@media print {
+  .sidebar, .top-bar, .ticker-wrap, .mobile-nav-toggle, .bg-grid, .bg-noise {
+    display: none !important;
+  }
+
+  .main-content {
+    margin-left: 0;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
+
+  .card, .stat-card, .strategy-card {
+    break-inside: avoid;
+    border: 1px solid #ccc;
+    background: white;
+  }
+}
+
+/* ========== Scroll Reveal ========== */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+</style>
+</head>
+<body>
+
+<!-- Background -->
+<div class="bg-grid"></div>
+<div class="bg-noise"></div>
+
+<!-- Top accent bar -->
+<div class="top-bar"></div>
+
+<!-- Ticker -->
+<div class="ticker-wrap">
+  <div class="ticker">
+    <span class="ticker-item"><span class="ticker-dot"></span> POLYMARKET <span class="price">LIVE</span></span>
+    <span class="ticker-item">总交易量 <span class="price">$12.8B+</span> <span class="change-up">↑</span></span>
+    <span class="ticker-item">活跃市场 <span class="price">500+</span></span>
+    <span class="ticker-item">机器人占比 <span style="color:#ffab00">73%</span> 套利利润</span>
+    <span class="ticker-item">Claude-Sonnet-3.7 回测 <span class="price">+20.54%</span> <span class="change-up">↑</span></span>
+    <span class="ticker-item">天气Bot盈利 <span class="price">$77K+</span> <span class="change-up">↑</span></span>
+    <span class="ticker-item">2026新规 <span style="color:#ffab00">动态费率</span></span>
+    <span class="ticker-item"><span class="ticker-dot"></span> POLYMARKET <span class="price">LIVE</span></span>
+    <span class="ticker-item">总交易量 <span class="price">$12.8B+</span> <span class="change-up">↑</span></span>
+    <span class="ticker-item">活跃市场 <span class="price">500+</span></span>
+    <span class="ticker-item">机器人占比 <span style="color:#ffab00">73%</span> 套利利润</span>
+    <span class="ticker-item">Claude-Sonnet-3.7 回测 <span class="price">+20.54%</span> <span class="change-up">↑</span></span>
+    <span class="ticker-item">天气Bot盈利 <span class="price">$77K+</span> <span class="change-up">↑</span></span>
+    <span class="ticker-item">2026新规 <span style="color:#ffab00">动态费率</span></span>
+  </div>
+</div>
+
+<!-- Mobile nav toggle -->
+<button class="mobile-nav-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="菜单">☰</button>
+
+<!-- Sidebar -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-logo">◆ POLYMARKET<br>RESEARCH</div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">基础认知</div>
+    <a href="#basics" class="sidebar-link"><span class="icon">📖</span> 平台基础认知</a>
+    <a href="#mechanism" class="sidebar-link"><span class="icon">⚙️</span> 交易机制详解</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">策略 & 机器人</div>
+    <a href="#strategies" class="sidebar-link"><span class="icon">🎯</span> 核心交易策略</a>
+    <a href="#bots" class="sidebar-link"><span class="icon">🤖</span> 交易机器人全景</a>
+    <a href="#github" class="sidebar-link"><span class="icon">📦</span> GitHub 开源生态</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">深度分析</div>
+    <a href="#rules-2026" class="sidebar-link"><span class="icon">⚡</span> 2026 规则巨变</a>
+    <a href="#profitability" class="sidebar-link"><span class="icon">💰</span> 盈利能力分析</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">实战 & 资源</div>
+    <a href="#us-stocks" class="sidebar-link"><span class="icon">🇺🇸</span> 美股交易机器人</a>
+    <a href="#guide" class="sidebar-link"><span class="icon">🚀</span> 实战指南</a>
+    <a href="#resources" class="sidebar-link"><span class="icon">🔗</span> 资源汇总</a>
+  </div>
+</nav>
+
+<!-- Main Content -->
+<main class="main-content">
+
+  <!-- ==================== HERO ==================== -->
+  <section class="hero" id="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="live-dot"></span> 2026 年 6 月 · 持续更新
+      </div>
+      <h1>预测市场 & 美股量化<br>交易机器人完全指南</h1>
+      <p>覆盖 Polymarket 预测市场与美股量化交易 —— 从平台机制到交易策略，从机器人架构到盈利能力分析，GitHub 热门开源项目一网打尽</p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-value">$12.8B+</div>
+          <div class="hero-stat-label">平台累计交易量</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">500+</div>
+          <div class="hero-stat-label">活跃预测市场</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">73%</div>
+          <div class="hero-stat-label">机器人套利利润占比</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">7.6%</div>
+          <div class="hero-stat-label">持续盈利交易者比例</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">190K+</div>
+          <div class="hero-stat-label">量化交易 GitHub Stars</div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-scroll" onclick="document.getElementById('basics').scrollIntoView()">▼ 开始探索</div>
+  </section>
+
+  <!-- ==================== 1. 基础认知 ==================== -->
+  <section class="section reveal" id="basics">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 01</div>
+      <h2 class="section-title">Polymarket 基础认知</h2>
+      <p class="section-desc">理解预测市场的核心机制，掌握 Polymarket 的基本运作原理</p>
+    </div>
+
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">🎲</div>
+        <h3>什么是预测市场</h3>
+        <p>Polymarket 是一个去中心化预测市场平台，用户可以针对现实世界事件（政治、加密、体育、经济等）的结果进行交易。每个市场都是一个二元问题（Yes/No），通过价格反映事件发生的概率。</p>
+        <span class="card-tag tag-green">去中心化 · Polygon 链</span>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <h3>价格 = 概率</h3>
+        <p>价格范围固定在 $0.00 – $1.00 之间。$0.65 的 Yes 价格意味着市场认为该事件有 65% 的概率发生。正确预测每股结算为 $1，错误预测结算为 $0。</p>
+        <span class="card-tag tag-blue">概率定价机制</span>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">💎</div>
+        <h3>USDC 与 Polygon</h3>
+        <p>所有交易使用 Polygon 网络上的 USDC 稳定币结算。用户需要 Polygon 钱包（如 MetaMask）并持有 MATIC 作为 Gas 费。入金支持信用卡、加密转账和跨链桥。</p>
+        <span class="card-tag tag-amber">USDC · MATIC Gas</span>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">🔮</div>
+        <h3>二元市场结构</h3>
+        <p>每个市场都有「是」(Yes) 和「否」(No) 两种份额。两个方向的价格之和始终趋近于 $1。你可以在任何时候卖出持仓获利了结，无需等到市场结算。</p>
+        <span class="card-tag tag-green">提前退出机制</span>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">📈</div>
+        <h3>交易示例</h3>
+        <p>以 <strong>$0.35</strong> 买入 200 份 Yes → 成本 $70。若价格上涨至 $0.65 卖出 → 收入 $130，利润 $60（+85.7%）。若持有至结算且正确 → 每股 $1，总收入 $200，利润 $130。</p>
+        <span class="card-tag tag-green">低买高卖 · 概率价差</span>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">🌐</div>
+        <h3>市场覆盖范围</h3>
+        <p>涵盖政治选举、加密价格、体育赛事、经济指标、天气温度、娱乐事件等数十个类别。每天有 500+ 活跃市场，新市场不断创建。</p>
+        <span class="card-tag tag-blue">多品类覆盖</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 2. 交易机制 ==================== -->
+  <section class="section reveal" id="mechanism">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 02</div>
+      <h2 class="section-title">交易机制详解</h2>
+      <p class="section-desc">深入了解 Polymarket 的两种交易模式、订单类型、CLOB 架构和 API 体系</p>
+    </div>
+
+    <!-- Two modes -->
+    <div class="cards-grid" style="margin-bottom: 32px;">
+      <div class="card">
+        <div class="card-icon">🎯</div>
+        <h3>预测模式（新手友好）</h3>
+        <p>直观显示事件概率百分比，无需理解 K 线图或订单簿。适合刚接触预测市场的用户，操作简单直接，一键买入 Yes 或 No 份额。</p>
+        <span class="card-tag tag-green">推荐新手使用</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">📉</div>
+        <h3>交易模式（专业玩家）</h3>
+        <p>完整的交易界面，提供 K 线图、订单簿深度图、限价单、止损单等高级功能。适合有交易经验的用户进行精确的价格操作。</p>
+        <span class="card-tag tag-amber">高级交易工具</span>
+      </div>
+    </div>
+
+    <!-- CLOB Architecture -->
+    <h3 style="font-size: 20px; margin-bottom: 16px;">🏦 CLOB 中央限价订单簿架构</h3>
+    <p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 14px;">
+      Polymarket 使用 CLOB (Central Limit Order Book) 作为核心交易引擎，而非 AMM（自动做市商）。这意味着所有交易都是点对点撮合的，提供更优的价格发现和更低的滑点。
+    </p>
+
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">📡</div>
+        <h3>Gamma API</h3>
+        <p><code style="background:var(--bg-terminal); padding:2px 6px; border-radius:3px; font-family:'JetBrains Mono',monospace; font-size:12px;">gamma-api.polymarket.com</code></p>
+        <p>只读市场数据接口，提供事件元数据、市场列表、价格快照、历史成交等信息。无需认证即可访问。</p>
+        <span class="card-tag tag-blue">只读 · 免认证</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">💱</div>
+        <h3>CLOB API</h3>
+        <p><code style="background:var(--bg-terminal); padding:2px 6px; border-radius:3px; font-family:'JetBrains Mono',monospace; font-size:12px;">clob.polymarket.com</code></p>
+        <p>交易操作接口，负责订单创建、签名、提交、取消等核心交易功能。需要 L1/L2 认证。</p>
+        <span class="card-tag tag-amber">交易核心 · 需认证</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🌉</div>
+        <h3>Bridge API</h3>
+        <p><code style="background:var(--bg-terminal); padding:2px 6px; border-radius:3px; font-family:'JetBrains Mono',monospace; font-size:12px;">bridge-api.polymarket.com</code></p>
+        <p>跨链存提款接口，处理 USDC 从不同链到 Polygon 的桥接操作，以及资金存取功能。</p>
+        <span class="card-tag tag-green">资金管理</span>
+      </div>
+    </div>
+
+    <!-- Auth Levels -->
+    <div class="stat-cards" style="margin-top: 32px;">
+      <div class="stat-card">
+        <div class="value" style="font-size: 24px;">L0</div>
+        <div class="label">只读访问 · 无需认证<br>市场数据 / 价格查询</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" style="font-size: 24px;">L1</div>
+        <div class="label">钱包签名 (EIP-712)<br>创建 API 密钥</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" style="font-size: 24px;">L2</div>
+        <div class="label">HMAC 完整认证<br>下单 / 撤单 / 账户操作</div>
+      </div>
+    </div>
+
+    <!-- Order Types -->
+    <div class="code-block" style="margin-top: 32px;">
+      <div class="code-header">
+        <span class="code-lang">TypeScript · CLOB Client v2 订单示例</span>
+        <div class="code-dots"><span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span></div>
+      </div>
+      <pre><span class="keyword">import</span> { ClobClient, OrderType, Side } <span class="keyword">from</span> <span class="string">"@polymarket/clob-client-v2"</span>;
+
+<span class="comment">// 市价单 (FOK - 全部成交否则取消)</span>
+<span class="keyword">await</span> client.<span class="func">createAndPostMarketOrder</span>({
+  tokenID: <span class="string">"&lt;token-id&gt;"</span>,
+  side: Side.<span class="func">BUY</span>,
+  size: <span class="number">100</span>,
+}, OrderType.<span class="func">FOK</span>);
+
+<span class="comment">// 限价单 (GTC - 有效至取消)</span>
+<span class="keyword">await</span> client.<span class="func">createAndPostOrder</span>({
+  tokenID: <span class="string">"&lt;token-id&gt;"</span>,
+  price: <span class="number">0.40</span>,
+  side: Side.<span class="func">BUY</span>,
+  size: <span class="number">100</span>,
+}, { tickSize: <span class="string">"0.01"</span> }, OrderType.<span class="func">GTC</span>);</pre>
+    </div>
+  </section>
+
+  <!-- ==================== 3. 核心交易策略 ==================== -->
+  <section class="section reveal" id="strategies">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 03</div>
+      <h2 class="section-title">核心交易策略</h2>
+      <p class="section-desc">从低风险套利到高赔率投机，掌握预测市场的五大主流策略</p>
+    </div>
+
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">01</div>
+      <div class="strategy-body">
+        <h4>🎯 概率价差交易（最核心策略）</h4>
+        <p>你赚的不是事件的对错，而是市场预期的价差。核心逻辑：比市场更早发现情绪拐点，在概率低估时买入，在概率高估时卖出。</p>
+        <div class="strategy-meta">
+          <span class="strategy-meta-item">胜率：<strong style="color:var(--accent-green)">~60%</strong></span>
+          <span class="strategy-meta-item">风险等级：<strong style="color:var(--accent-amber)">中等</strong></span>
+          <span class="strategy-meta-item">适合：<strong>所有交易者</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">02</div>
+      <div class="strategy-body">
+        <h4>📊 情绪交易法</h4>
+        <p>追踪三大指标：推特话题热度、KOL 态度转变、散户风向一致性。当全网观点高度一致时，就是反转信号。不在新闻刚出的前两小时情绪亢奋期进场。</p>
+        <div class="strategy-meta">
+          <span class="strategy-meta-item">胜率：<strong style="color:var(--accent-green)">~55%</strong></span>
+          <span class="strategy-meta-item">风险等级：<strong style="color:var(--accent-amber)">中等</strong></span>
+          <span class="strategy-meta-item">关键：<strong>信息速度优势</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">03</div>
+      <div class="strategy-body">
+        <h4>🏁 尾盘扫单套利（新手最推荐）</h4>
+        <p>事件快结束时（最后 5 分钟）买入，此时趋势基本确认，概率 >97%。设置止损线：若概率跌到 0.90 即卖。实测胜率约 80%，但单笔利润较小。</p>
+        <div class="strategy-meta">
+          <span class="strategy-meta-item">胜率：<strong style="color:var(--accent-green)">~80%</strong></span>
+          <span class="strategy-meta-item">风险等级：<strong style="color:var(--accent-green)">低</strong></span>
+          <span class="strategy-meta-item">注意：<strong style="color:var(--accent-red)">费后利润薄</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">04</div>
+      <div class="strategy-body">
+        <h4>🔄 跨市场套利</h4>
+        <p>对比 Polymarket、Kalshi、PredictIt 等不同平台上同一事件的价格差异，低价买入高价卖出锁定无风险利润。窗口期通常只有几秒到几分钟，需要自动化工具。</p>
+        <div class="strategy-meta">
+          <span class="strategy-meta-item">胜率：<strong style="color:var(--accent-green)">~90%+</strong></span>
+          <span class="strategy-meta-item">风险等级：<strong style="color:var(--accent-green)">低</strong></span>
+          <span class="strategy-meta-item">门槛：<strong style="color:var(--accent-red)">HFT 基础设施</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">05</div>
+      <div class="strategy-body">
+        <h4>📈 提供流动性（做市商策略）</h4>
+        <p>在订单簿两侧同时挂买单和卖单，赚取买卖价差。2026 年新规后 Maker 端 0 手续费 + 返佣，是当前最受鼓励的策略方向。需要较大资金量和做市算法。</p>
+        <div class="strategy-meta">
+          <span class="strategy-meta-item">胜率：<strong style="color:var(--accent-green)">取决于算法</strong></span>
+          <span class="strategy-meta-item">风险等级：<strong style="color:var(--accent-amber)">中等</strong></span>
+          <span class="strategy-meta-item">门槛：<strong style="color:var(--accent-red)">资金 + 技术</strong></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 4. 交易机器人全景 ==================== -->
+  <section class="section reveal" id="bots">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 04</div>
+      <h2 class="section-title">交易机器人全景</h2>
+      <p class="section-desc">理解机器人在 Polymarket 生态中的主导地位、类型分类和运作原理</p>
+    </div>
+
+    <!-- Key Stats -->
+    <div class="stat-cards">
+      <div class="stat-card">
+        <div class="value red">92%</div>
+        <div class="label">手动交易者亏损比例</div>
+      </div>
+      <div class="stat-card">
+        <div class="value green">73%</div>
+        <div class="label">机器人捕获的套利利润</div>
+      </div>
+      <div class="stat-card">
+        <div class="value amber">45%</div>
+        <div class="label">做市端机器人参与度</div>
+      </div>
+      <div class="stat-card">
+        <div class="value blue">7.6%</div>
+        <div class="label">持续盈利交易者比例</div>
+      </div>
+    </div>
+
+    <!-- Bot Types -->
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">🤖 五大机器人类型</h3>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">🧠</div>
+        <h3>AI/LLM 推理机器人</h3>
+        <p>利用大语言模型（Claude、GPT-4 等）进行概率推理。LLM 分析多源数据（新闻、RSS、API），估算事件概率，对比市场价格，自动执行交易。</p>
+        <p style="margin-top: 8px; font-size: 12px; color: var(--accent-green);">代表：OpenClaw、Polymarket/agents、zostaff/poly-trading-bot</p>
+        <span class="card-tag tag-green">当前最主流</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">👁️</div>
+        <h3>跟单/复制交易机器人</h3>
+        <p>实时监控"聪明钱"钱包的交易行为，自动复制其买卖操作。早期有效，但随着策略同质化，42.9% 的胜率不如抛硬币。</p>
+        <p style="margin-top: 8px; font-size: 12px; color: var(--accent-red);">风险：Alpha 往往是结算机制的统计幻觉</p>
+        <span class="card-tag tag-red">策略衰退中</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <h3>做市机器人</h3>
+        <p>在订单簿双向挂单提供流动性，赚取买卖价差。2026 年新规后成为最优策略方向。需要高频取消/替换订单（<100ms）和精准的库存管理。</p>
+        <p style="margin-top: 8px; font-size: 12px; color: var(--accent-green);">代表：warproxxx/poly-maker、theo-wq/Polymarket-market-making-bot</p>
+        <span class="card-tag tag-green">2026 最受鼓励</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">⚡</div>
+        <h3>套利机器人</h3>
+        <p>捕捉跨市场价差、CTF 铸造套利、延迟套利等机会。随着平台规则收紧（取消 500ms 延迟、引入动态费率），传统套利窗口大幅收窄。</p>
+        <p style="margin-top: 8px; font-size: 12px; color: var(--accent-red);">延迟套利已死 · 跨市场套利需 HFT</p>
+        <span class="card-tag tag-red">利润空间压缩</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🌤️</div>
+        <h3>数据驱动预测机器人</h3>
+        <p>基于特定数据源进行预测，如天气 API → 温度预测市场、Domino's 订单 → 军事活动预测。利用非对称信息优势取胜，是最具创意的方向。</p>
+        <p style="margin-top: 8px; font-size: 12px; color: var(--accent-green);">代表：automatedAItradingbot (天气，$77K+)、Pentagon Pizza Bot ($80K)</p>
+        <span class="card-tag tag-green">最高赔率</span>
+      </div>
+    </div>
+
+    <!-- Architecture Diagram -->
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">🏗️ 机器人通用架构</h3>
+    <div class="arch-diagram">
+      <div class="arch-layer">
+        <div class="arch-layer-label">数据层</div>
+        <div class="arch-box data">📡 Gamma API<br>市场数据</div>
+        <div class="arch-box data">📰 新闻 / RSS</div>
+        <div class="arch-box data">🌤️ 外部 API<br>天气 / 链上</div>
+        <div class="arch-box data">🔍 网页抓取</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-layer">
+        <div class="arch-layer-label">推理层</div>
+        <div class="arch-box reason">🧠 LLM 推理<br>概率估算</div>
+        <div class="arch-box reason">📊 量化模型<br>回测引擎</div>
+        <div class="arch-box reason">🎯 策略引擎<br>信号生成</div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-layer">
+        <div class="arch-layer-label">执行层</div>
+        <div class="arch-box exec">🔐 订单签名<br>EIP-712</div>
+        <div class="arch-box exec">💱 CLOB API<br>下单 / 撤单</div>
+        <div class="arch-box exec">📋 风控管理<br>仓位 / 止损</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 5. GitHub 开源生态 ==================== -->
+  <section class="section reveal" id="github">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 05</div>
+      <h2 class="section-title">GitHub 开源生态</h2>
+      <p class="section-desc">精选 20+ 个关键开源项目，覆盖官方 SDK、交易框架、AI 代理和市场分析工具</p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>项目</th>
+            <th>类型</th>
+            <th>Stars</th>
+            <th>语言</th>
+            <th>核心功能</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Polymarket/agents</strong></td>
+            <td><span class="tag-sm tag-official">官方</span></td>
+            <td class="stars">★ 1,900</td>
+            <td>Python</td>
+            <td>AI 交易代理框架，RAG 支持，Docker 部署</td>
+          </tr>
+          <tr>
+            <td><strong>py-clob-client</strong></td>
+            <td><span class="tag-sm tag-official">官方</span></td>
+            <td class="stars">★ 700</td>
+            <td>Python</td>
+            <td>官方 Python CLOB 客户端</td>
+          </tr>
+          <tr>
+            <td><strong>clob-client-v2</strong></td>
+            <td><span class="tag-sm tag-official">官方</span></td>
+            <td class="stars">★ 新发布</td>
+            <td>TypeScript</td>
+            <td>v2 TypeScript CLOB 客户端，viem 钱包集成</td>
+          </tr>
+          <tr>
+            <td><strong>rs-clob-client</strong></td>
+            <td><span class="tag-sm tag-official">官方</span></td>
+            <td class="stars">★ 418</td>
+            <td>Rust</td>
+            <td>高性能 Rust CLOB 客户端，<1ms 延迟</td>
+          </tr>
+          <tr>
+            <td><strong>zostaff/poly-trading-bot</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 活跃</td>
+            <td>Python</td>
+            <td>LLM 驱动 · Kelly 仓位管理 · Streamlit 面板 · 3 策略模式</td>
+          </tr>
+          <tr>
+            <td><strong>vladmeer/polymarket-copy-trading-bot</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 1,140</td>
+            <td>Python</td>
+            <td>实时跟单 Smart Money · CLOB 执行</td>
+          </tr>
+          <tr>
+            <td><strong>warproxxx/poly-maker</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 792</td>
+            <td>Python</td>
+            <td>自动做市 · Google Sheets 配置 · 双向挂单</td>
+          </tr>
+          <tr>
+            <td><strong>theo-wq/Polymarket-market-making-bot</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 活跃</td>
+            <td>Python</td>
+            <td>超低延迟做市 &lt;0.15s · 订单簿分析</td>
+          </tr>
+          <tr>
+            <td><strong>SidharthK2/polymarket-agent</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 活跃</td>
+            <td>TypeScript</td>
+            <td>多代理系统 · Telegram Bot · 市场发现</td>
+          </tr>
+          <tr>
+            <td><strong>shiyu-coder/Kronos</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 高</td>
+            <td>Python</td>
+            <td>金融 K 线基础模型 · AAAI 2026 · OHLCV 预测</td>
+          </tr>
+          <tr>
+            <td><strong>Fincept-Corporation/FinceptTerminal</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 24,900</td>
+            <td>C++/Python</td>
+            <td>Bloomberg 级别金融终端 · 37 AI Agent · 100+ 数据源</td>
+          </tr>
+          <tr>
+            <td><strong>bitman09/Rust-Politics-Sports-Bot</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 活跃</td>
+            <td>Rust</td>
+            <td>体育/政治二元市场 · 移动止损策略</td>
+          </tr>
+          <tr>
+            <td><strong>Predictly-MCP-Labs/polymarket-ai-btc-arbitrage</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 活跃</td>
+            <td>TypeScript</td>
+            <td>OpenClaw 增强 · BTC 5m/15m 套利</td>
+          </tr>
+          <tr>
+            <td><strong>ShadowSpread/polymarket-auto-trading</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 活跃</td>
+            <td>TypeScript</td>
+            <td>自动跟单 · CLOB 镜像交易</td>
+          </tr>
+          <tr>
+            <td><strong>0xLumiere/arbitrage-copy-trading-bot</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 活跃</td>
+            <td>TypeScript</td>
+            <td>全栈套利+跟单 · WebSocket 驱动</td>
+          </tr>
+          <tr>
+            <td><strong>hackemonn/Polymarket-Bot</strong></td>
+            <td><span class="tag-sm tag-community">社区</span></td>
+            <td class="stars">★ 活跃</td>
+            <td>Python</td>
+            <td>MVP 策略测试框架 · 订单执行</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================== 6. 2026 规则巨变 ==================== -->
+  <section class="section reveal" id="rules-2026">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 06</div>
+      <h2 class="section-title">2026 年规则巨变</h2>
+      <p class="section-desc">2026 年 2 月 18 日 Polymarket 进行了史上最大规模规则调整，彻底改变了交易机器人格局</p>
+    </div>
+
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-date">变更一</div>
+        <div class="timeline-title">🔓 取消 500ms Taker 延迟</div>
+        <div class="timeline-desc">订单即时执行，不再有取消窗口。旧有的"延迟套利"策略（包括著名的月入 $515K 的 99% 胜率机器人）彻底失效。这对速度型 Taker 策略是致命打击。</div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-date">变更二</div>
+        <div class="timeline-title">💰 引入动态 Taker 费率</div>
+        <div class="timeline-desc">
+          <div class="formula-box">
+            <div class="label">动态 Taker 费率公式</div>
+            <div class="formula">费率 = C × 0.25 × (p × (1 − p))²</div>
+            <div class="result">峰值费率 ≈ 1.56%（在 p = 0.50 时）<br>极端概率（p→0 或 p→1）费率趋近于 0</div>
+          </div>
+          这个公式意味着：在概率最不确定的市场（50%）交易成本最高，而在几乎确定的市场交易成本极低。费率结构鼓励在确定性高的市场提供流动性。
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-date">变更三</div>
+        <div class="timeline-title">🏟️ 费率扩展至体育市场</div>
+        <div class="timeline-desc">新的费率结构扩展到 NCAA、Serie A 等体育赛事市场。此前体育市场费率较低，现在与传统市场统一。</div>
+      </div>
+    </div>
+
+    <div class="alert alert-warning" style="margin-top: 32px;">
+      <span class="alert-icon">⚠️</span>
+      <div class="alert-content">
+        <h4>战略转变：Taker 套利 → Maker 做市</h4>
+        <p>2026 年后，Maker 策略（提供流动性）在结构上受鼓励：0 手续费 + 返佣奖励。所有盈利机器人必须转向 Maker 策略。旧有的 Taker 套利模式由于动态费率的存在而丧失盈利空间。</p>
+      </div>
+    </div>
+
+    <h3 style="font-size: 20px; margin: 32px 0 16px;">🔧 2026 年可行机器人技术要求</h3>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">🔌</div>
+        <h3>WebSocket 优先</h3>
+        <p>放弃 REST 轮询，改用 WebSocket 实时数据流。订单簿的毫秒级更新是盈利关键。</p>
+        <span class="card-tag tag-amber">必需</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">💳</div>
+        <h3>费率感知签名</h3>
+        <p>订单必须包含 <code>feeRateBps</code> 字段，精确计算并动态调整报价以覆盖 Taker 费用。</p>
+        <span class="card-tag tag-amber">必需</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">⚡</div>
+        <h3>&lt;100ms 撤单/替换</h3>
+        <p>做市订单的取消和替换循环必须在 100ms 内完成。更高的延迟意味着库存风险暴露。</p>
+        <span class="card-tag tag-red">高门槛</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🛡️</div>
+        <h3>Maker-Only 模式</h3>
+        <p>设置 Post-Only 订单标志，确保始终作为 Maker 成交，避免触发 Taker 费用。</p>
+        <span class="card-tag tag-green">推荐</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 7. 盈利能力分析 ==================== -->
+  <section class="section reveal" id="profitability">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 07</div>
+      <h2 class="section-title">盈利能力深度分析</h2>
+      <p class="section-desc">基于真实案例数据，客观评估 Polymarket 交易机器人的盈利可行性和风险</p>
+    </div>
+
+    <!-- Success Cases -->
+    <h3 style="font-size: 20px; margin-bottom: 20px;">🏆 已验证的盈利案例</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>机器人 / 策略</th>
+            <th>报告利润</th>
+            <th>时间跨度</th>
+            <th>数据可信度</th>
+            <th>核心策略</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>0x8dxd (OpenClaw)</strong></td>
+            <td class="profit">$1,700,000+</td>
+            <td>20,000+ 笔交易</td>
+            <td>高 — 链上可查</td>
+            <td>多策略 AI 代理套利</td>
+          </tr>
+          <tr>
+            <td><strong>automatedAItradingbot</strong></td>
+            <td class="profit">$77,315</td>
+            <td>2,517 次预测 (14个月)</td>
+            <td>高 — Polymarket 公开资料</td>
+            <td>天气数据 API → 温度预测市场</td>
+          </tr>
+          <tr>
+            <td><strong>Pentagon Pizza Bot</strong></td>
+            <td class="profit">$80,000</td>
+            <td>单个夜晚</td>
+            <td>中等 — X 帖文</td>
+            <td>Domino's 披萨订单监控 → 军事预测</td>
+          </tr>
+          <tr>
+            <td><strong>程序员警报机器人</strong></td>
+            <td class="profit">$75,000</td>
+            <td>单日</td>
+            <td>中等 — 存档/X 帖文</td>
+            <td>Claude+Cursor 鲸鱼钱包追踪</td>
+          </tr>
+          <tr>
+            <td><strong>时区套利</strong></td>
+            <td class="profit">$43,800</td>
+            <td>一夜 ($12K→$55.8K)</td>
+            <td>中等 — X 帖文 + 链上</td>
+            <td>全球 RSS + 美国夜间交易</td>
+          </tr>
+          <tr>
+            <td><strong>Claude AI Agent (LiveTradeBench)</strong></td>
+            <td class="profit">+20.54% 累计</td>
+            <td>50 个交易日</td>
+            <td>高 — 学术论文</td>
+            <td>LLM 推理 + 概率评估</td>
+          </tr>
+          <tr>
+            <td><strong>Claude AI Agent (48h)</strong></td>
+            <td class="profit">+1,322%</td>
+            <td>48 小时 ($1K→$13.2K)</td>
+            <td>高 — 链上验证</td>
+            <td>AI 代理自主交易</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Failed Strategies -->
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">💀 "25 个方向，只活了 4 个" — 策略尸检报告</h3>
+    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
+      最详实的一手实战复盘（2026 年 3 月发布）：一名开发者在 Polymarket 上测试了 25 个策略方向，只有 4 个存活。以下是失败的 21 个策略中具有代表性的：
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>策略</th>
+            <th>交易次数</th>
+            <th>盈亏</th>
+            <th>判决</th>
+            <th>失败原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>鲸鱼跟单</td>
+            <td>数小时</td>
+            <td class="loss">亏损</td>
+            <td class="loss">✗ 失败</td>
+            <td>"最蠢的想法，花了最多时间" — Alpha 是统计幻觉</td>
+          </tr>
+          <tr>
+            <td>BTC 5分钟延迟套利</td>
+            <td>实盘</td>
+            <td class="loss">-$6.34</td>
+            <td class="loss">✗ 失败</td>
+            <td>逆向选择成本高达 75.9%</td>
+          </tr>
+          <tr>
+            <td>BTC 5分钟动量 (Taker)</td>
+            <td>294</td>
+            <td class="profit">+$39</td>
+            <td class="loss">✗ 失败</td>
+            <td>胜率 81%→63%，利润因子仅 0.34x</td>
+          </tr>
+          <tr>
+            <td>BTC 5分钟均值回归</td>
+            <td>14</td>
+            <td class="loss">亏损</td>
+            <td class="loss">✗ 失败</td>
+            <td>29% 胜率，5 分钟尺度动量占优</td>
+          </tr>
+          <tr>
+            <td>UMA 结算收割 (宽松)</td>
+            <td>22</td>
+            <td class="profit">+$5.09</td>
+            <td class="loss">✗ 失败</td>
+            <td>100% 胜率但利润太薄</td>
+          </tr>
+          <tr>
+            <td>UMA 结算收割 (严格)</td>
+            <td>20</td>
+            <td class="loss">-$2.32</td>
+            <td class="loss">✗ 失败</td>
+            <td>"我最喜欢的尸体：赢钱和赚钱是两回事"</td>
+          </tr>
+          <tr>
+            <td>CTF 铸造套利</td>
+            <td>多次</td>
+            <td class="loss">-97%+</td>
+            <td class="loss">✗ 失败</td>
+            <td>CLOB 出价始终 < 0.04，Taker 模式血亏</td>
+          </tr>
+          <tr>
+            <td>做市 (散户)</td>
+            <td>多次</td>
+            <td class="loss">停止</td>
+            <td class="loss">✗ 失败</td>
+            <td>"纯军备竞赛" — 45% 市场参与是机器人</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Key Takeaways -->
+    <div class="alert alert-success" style="margin-top: 32px;">
+      <span class="alert-icon">💡</span>
+      <div class="alert-content">
+        <h4>存活策略的共同特征</h4>
+        <p>仅存的 4 个盈利策略有一个共同点：<strong>它们与手动交易者竞争小众市场，而不是与其他机器人竞争。</strong>核心洞察——"找到一个更弱的对手群体比找到一个聪明的策略更重要。"</p>
+      </div>
+    </div>
+
+    <div class="alert alert-danger" style="margin-top: 16px;">
+      <span class="alert-icon">⚠️</span>
+      <div class="alert-content">
+        <h4>重要警示</h4>
+        <p><strong>生存者偏差极端严重</strong>——每一个 $75K 成功故事背后，有数百个默默亏钱的失败机器人。"25 个策略，4 个存活"才是最诚实的基准。策略一旦公开就会被复制，利润边际迅速压缩。OpenClaw 本身不保证盈利——多个 OpenClaw 机器人已被清算。私钥导入存在资金被盗风险。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 8. 实战指南 ==================== -->
+  <section class="section reveal" id="guide">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 08</div>
+      <h2 class="section-title">实战指南</h2>
+      <p class="section-desc">从零开始构建和部署你的 Polymarket 交易系统</p>
+    </div>
+
+    <h3 style="font-size: 20px; margin-bottom: 20px;">🛤️ 两条入门路径</h3>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">🚪</div>
+        <h3>路径一：Gate 交易所（推荐新手）</h3>
+        <p>通过 Gate App 的 Polymarket 模块参与，直接用现货 USDT 交易，无需链上操作、无需钱包、无需 Gas 费。体验和常规交易所交易完全一致。</p>
+        <span class="card-tag tag-green">零门槛 · 5 分钟上手</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔐</div>
+        <h3>路径二：直接使用 Polymarket</h3>
+        <p>准备 Polygon 钱包（MetaMask）、存入 USDC、获取 MATIC 作为 Gas 费。连接钱包后可直接在 polymarket.com 交易或通过 API 编程交易。</p>
+        <span class="card-tag tag-amber">需要钱包 · 链上操作</span>
+      </div>
+    </div>
+
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">🤖 构建交易机器人的步骤</h3>
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">1</div>
+      <div class="strategy-body">
+        <h4>选择 SDK</h4>
+        <p>Python 选 <strong>py-clob-client</strong>（官方）或新的 <strong>py-sdk</strong>；TypeScript 选 <strong>@polymarket/clob-client-v2</strong>；Rust 选 <strong>rs-clob-client</strong>（追求最低延迟）；Go 选社区维护的 <strong>polymarket-go-sdk</strong>。</p>
+      </div>
+    </div>
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">2</div>
+      <div class="strategy-body">
+        <h4>创建 API 密钥（L2 认证）</h4>
+        <p>使用钱包签名 EIP-712 消息创建 API 凭证（key + secret + passphrase）。<strong>绝对不要在主网代码中硬编码私钥！</strong>使用环境变量或 KMS 管理。</p>
+      </div>
+    </div>
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">3</div>
+      <div class="strategy-body">
+        <h4>设计策略</h4>
+        <p>明确你的优势来源：数据速度？LLM 推理能力？小众市场认知？API 先行验证数据源，确认你能获取别人没有的信息。从小众市场开始，避免与专业做市商正面竞争。</p>
+      </div>
+    </div>
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">4</div>
+      <div class="strategy-body">
+        <h4>回测与模拟</h4>
+        <p>使用历史数据回测策略。Polymarket 提供历史 Gamma API 数据。先用小额资金（$20-50）进行真实环境测试，不要在回测中过拟合。</p>
+      </div>
+    </div>
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">5</div>
+      <div class="strategy-body">
+        <h4>部署与监控</h4>
+        <p>部署到低延迟服务器（推荐 AWS us-east-1 或离 CLOB 服务器近的区域）。设置 Telegram/邮件告警、自动止损、仓位上限。持续记录所有交易日志用于复盘。</p>
+      </div>
+    </div>
+
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">📋 风险控制清单</h3>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">💰</div>
+        <h3>资金管理</h3>
+        <p>单笔交易不超过总资金的 <strong>20%</strong>。连错两单立即停止并复盘。绝不扛单，严格止损。设置每日亏损上限。</p>
+        <span class="card-tag tag-red">铁律</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔒</div>
+        <h3>安全</h3>
+        <p>使用专用钱包存放交易资金。私钥通过环境变量或 KMS 管理。定期检查 API 密钥权限。警惕钓鱼合约和恶意前端。</p>
+        <span class="card-tag tag-red">关键</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <h3>监控</h3>
+        <p>实时监控仓位、未实现盈亏、API 速率限制。设置异常检测（异常大单、连续亏损、API 异常）。机器人崩溃时自动平仓保护。</p>
+        <span class="card-tag tag-amber">重要</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">📝</div>
+        <h3>复盘</h3>
+        <p>每周分析盈亏来源、胜率变化、策略衰减迹象。市场环境变化时及时调整参数。不要迷恋一个正在失效的策略。</p>
+        <span class="card-tag tag-blue">持续</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 9. 美股交易机器人 ==================== -->
+  <section class="section reveal" id="us-stocks">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 09</div>
+      <h2 class="section-title">美股量化交易机器人</h2>
+      <p class="section-desc">探索 GitHub 最热门的开源美股交易机器人项目、AI 量化交易框架和实战盈利能力数据</p>
+    </div>
+
+    <!-- 生态概览统计 -->
+    <h3 style="font-size: 20px; margin-bottom: 20px;">📊 美股交易机器人生态概览</h3>
+    <div class="stat-cards">
+      <div class="stat-card">
+        <div class="value green">190K+</div>
+        <div class="label">AI 量化金融 GitHub Stars 总量</div>
+      </div>
+      <div class="stat-card">
+        <div class="value blue">71.4K</div>
+        <div class="label">TradingAgents 单项最高 Star</div>
+      </div>
+      <div class="stat-card">
+        <div class="value amber">50%</div>
+        <div class="label">AI 选股超额收益（北大研究）</div>
+      </div>
+      <div class="stat-card">
+        <div class="value red">6/32</div>
+        <div class="label">AI 模型实盘盈利比例</div>
+      </div>
+    </div>
+
+    <!-- 两种范式 -->
+    <div class="alert alert-info" style="margin-top: 32px;">
+      <span class="alert-icon">💡</span>
+      <div class="alert-content">
+        <h4>2026 年两大范式：Multi-Agent 协作 vs 端到端 RL</h4>
+        <p>当前美股交易机器人分化为两条技术路线：<strong>多智能体 LLM 协作</strong>（模拟华尔街分析团队，代表: TradingAgents 71.4K⭐）和 <strong>端到端强化学习</strong>（FinRL 14K⭐, Qlib 36K⭐）。前者胜在可解释性和灵活性，后者胜在策略优化效率。</p>
+      </div>
+    </div>
+
+    <!-- 热门项目表 -->
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">🏆 GitHub 热门美股交易机器人 Top 15</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>项目</th>
+            <th>Stars</th>
+            <th>语言</th>
+            <th>类型</th>
+            <th>核心特性</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>🏆 TauricResearch/TradingAgents</strong></td>
+            <td class="stars">★ 71,400</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-official">Multi-Agent</span></td>
+            <td>模拟华尔街投研团队：分析师→多空辩论→交易员→风控审批；13+ LLM；零代码；自带记忆与反思</td>
+          </tr>
+          <tr>
+            <td><strong>OpenBB-finance/OpenBB</strong></td>
+            <td class="stars">★ 62,276</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-official">终端平台</span></td>
+            <td>开源 Bloomberg 替代品，100+ 数据源集成，AI 分析代理，CLI + Web 界面</td>
+          </tr>
+          <tr>
+            <td><strong>microsoft/qlib</strong></td>
+            <td class="stars">★ 36,000</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-official">微软官方</span></td>
+            <td>AI 量化投资平台，RD-Agent 自动因子挖掘与模型进化，覆盖选股/择时/风控全流程</td>
+          </tr>
+          <tr>
+            <td><strong>yfinance (ranaroussi)</strong></td>
+            <td class="stars">★ 21,826</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">数据接口</span></td>
+            <td>Yahoo Finance 数据下载，几乎所有美股机器人的基础依赖</td>
+          </tr>
+          <tr>
+            <td><strong>mementum/backtrader</strong></td>
+            <td class="stars">★ 20,549</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">回测框架</span></td>
+            <td>老牌事件驱动回测引擎，支持多时间框架、多数据源、实时交易</td>
+          </tr>
+          <tr>
+            <td><strong>AI4Finance-Foundation/FinRL</strong></td>
+            <td class="stars">★ 14,051</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">强化学习</span></td>
+            <td>深度 RL 金融交易框架，Gym 风格环境，支持股票/加密/外汇</td>
+          </tr>
+          <tr>
+            <td><strong>HKUDS/AI-Trader</strong></td>
+            <td class="stars">★ 4,200</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">Agent 原生</span></td>
+            <td>港大出品，AI Agent 发一条消息即可交易；集体智能辩论；美股/加密/期权全覆盖</td>
+          </tr>
+          <tr>
+            <td><strong>zhound420/swarm-trader</strong></td>
+            <td class="stars">★ 3,800</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">Multi-Agent</span></td>
+            <td>20 个分析师智能体（巴菲特/芒格/Burry 等），SEC EDGAR + yfinance，Alpaca 实盘</td>
+          </tr>
+          <tr>
+            <td><strong>SkywalkerJi/nofx</strong></td>
+            <td class="stars">★ 3,200</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">交易 OS</span></td>
+            <td>可插拔 AI 大脑（DeepSeek/Qwen/GPT/Claude），可视化策略构建器，AI 辩论竞技场</td>
+          </tr>
+          <tr>
+            <td><strong>14H034160212/AlphaTrader</strong></td>
+            <td class="stars">★ 2,800</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">全自动实盘</span></td>
+            <td>Kronos K线预测 + 本地 Qwen3.5；Alpaca 美股实盘 + Moomoo 港股；跨股票催化剂引擎</td>
+          </tr>
+          <tr>
+            <td><strong>vibe-trading/vibe</strong></td>
+            <td class="stars">★ 4,100</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">零代码</span></td>
+            <td>港大出品，自然语言描述策略→自动回测→导出 TradingView；散户友好</td>
+          </tr>
+          <tr>
+            <td><strong>OpenAlice</strong></td>
+            <td class="stars">★ 3,100</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">隐私优先</span></td>
+            <td>本地 AI 交易代理引擎，「一人制华尔街」，数据完全不出本地</td>
+          </tr>
+          <tr>
+            <td><strong>DeepJani05/multi-market-trading-bot</strong></td>
+            <td class="stars">★ 活跃</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">跨市场</span></td>
+            <td>XGBoost + LSTM 信号集成；Kelly 仓位管理；Alpaca/OANDA/Binance 三市场</td>
+          </tr>
+          <tr>
+            <td><strong>PAT0216/paper-trader</strong></td>
+            <td class="stars">★ 活跃</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">ML 对比</span></td>
+            <td>动量 vs XGBoost vs LSTM 三策略并行对比；GitHub Actions 自动日更；SPY +17.58%</td>
+          </tr>
+          <tr>
+            <td><strong>PatrickSUDO/fadacai-portfolio</strong></td>
+            <td class="stars">★ 活跃</td>
+            <td>Python</td>
+            <td><span class="tag-sm tag-community">Claude原生</span></td>
+            <td>Claude Code skills + MCP 服务器；第一性原理纪律；7 个 MCP 数据源；Firstrade 实盘</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 架构对比 -->
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">🏗️ 主流架构模式对比</h3>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">🧠</div>
+        <h3>Multi-Agent 协作架构</h3>
+        <p><strong>代表：</strong>TradingAgents, Swarm Trader, AI-Trader</p>
+        <p style="margin-top:8px;">模拟华尔街分工：分析师搜集数据 → 多空研究员辩论 → 交易员制定方案 → 风控官审批。每个角色由独立 LLM Agent 扮演，最终由交易员汇总各方意见执行决策。</p>
+        <span class="card-tag tag-green">最热门 · 71K+ Stars</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🎓</div>
+        <h3>端到端强化学习</h3>
+        <p><strong>代表：</strong>FinRL, Qlib (RD-Agent)</p>
+        <p style="margin-top:8px;">将交易建模为马尔可夫决策过程，使用 PPO/DDQN/SAC 等算法直接学习最优策略。微软 RD-Agent 用 LLM 自动挖掘因子、设计模型、进化策略。</p>
+        <span class="card-tag tag-blue">微软 · 学术前沿</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <h3>LLM 直接推理</h3>
+        <p><strong>代表：</strong>Grok 4, Claude Portfolio, AlphaTrader</p>
+        <p style="margin-top:8px;">完全不依赖传统量化模型，将新闻/财报/宏观数据直接喂给 LLM，由 LLM 给出多空判断和仓位建议。Grok 4 在 8 模型竞赛中以 +7% 领先。</p>
+        <span class="card-tag tag-amber">新兴范式</span>
+      </div>
+    </div>
+
+    <!-- AI 盈利能力 -->
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">💰 AI 交易盈利能力实际数据</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>实验 / 系统</th>
+            <th>回报</th>
+            <th>基准对比</th>
+            <th>时间跨度</th>
+            <th>数据质量</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>北大 Agentic AI 研究 (Russell 1000)</strong></td>
+            <td class="profit">+50%</td>
+            <td>基准 +26%（超额 +24%）</td>
+            <td>2025.04–2026.01 (9个月)</td>
+            <td>⭐ 学术论文 — 夏普 2.43</td>
+          </tr>
+          <tr>
+            <td><strong>Grok AI 投资组合</strong></td>
+            <td class="profit">+59%</td>
+            <td>S&P 500 +36%（超额 +23%）</td>
+            <td>9 个月</td>
+            <td>⭐ Autopilot $17M 跟投</td>
+          </tr>
+          <tr>
+            <td><strong>Rallies AI Arena — Grok 4</strong></td>
+            <td class="profit">+7% ($6,979)</td>
+            <td>8 模型中最佳</td>
+            <td>2025.11 起</td>
+            <td>⭐ 公开竞赛</td>
+          </tr>
+          <tr>
+            <td><strong>Rallies AI Arena — Claude 4.5</strong></td>
+            <td class="profit">+5.7%</td>
+            <td>第 2 名</td>
+            <td>2025.11 起</td>
+            <td>⭐ 公开竞赛</td>
+          </tr>
+          <tr>
+            <td><strong>ChatGPT-4o 微型股实验</strong></td>
+            <td class="profit">+32.6%</td>
+            <td>S&P 500 +4.5%</td>
+            <td>10 周</td>
+            <td>⭐ 夏普 2.96 · 回撤 -7.1%</td>
+          </tr>
+          <tr>
+            <td><strong>Paper Trader AI — 动量策略</strong></td>
+            <td class="profit">+17.58%</td>
+            <td>SPY +3.85%</td>
+            <td>2025.10–2026.02</td>
+            <td>⭐ 夏普 2.04 · GitHub 开源</td>
+          </tr>
+          <tr>
+            <td><strong>Alpha Arena — 整体组合</strong></td>
+            <td class="loss">-33%</td>
+            <td>8 个 AI 模型平均亏损</td>
+            <td>2 周</td>
+            <td>⚠️ 6/32 盈利 · Qwen 巨亏</td>
+          </tr>
+          <tr>
+            <td><strong>Intelligent Alpha Claude 组合</strong></td>
+            <td class="loss">+2.6%</td>
+            <td>S&P 500 +8.3%</td>
+            <td>2 个月</td>
+            <td>⚠️ 跑输大盘 · $50K 种子</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="alert alert-warning" style="margin-top: 24px;">
+      <span class="alert-icon">⚠️</span>
+      <div class="alert-content">
+        <h4>AI 交易的真相：少数赢，多数输</h4>
+        <p>11 个公开 AI 交易竞技场中，<strong>仅 2 个竞技场的中位数模型盈利</strong>。最佳表现者（Grok 4、北大 Agentic AI 系统）展示了真实 Alpha，但大多数公开实验亏损或跑输市场。核心问题：LLM 普遍存在过度交易、时机错误、仓位管理不当。传统回测对 LLM 无效（训练数据已包含历史信息），只有实盘测试具有参考价值。</p>
+      </div>
+    </div>
+
+    <!-- 量化平台对比 -->
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">🔧 主流量化交易平台/框架对比</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>框架</th>
+            <th>Stars</th>
+            <th>定位</th>
+            <th>优势</th>
+            <th>适用场景</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Microsoft Qlib</strong></td>
+            <td>36K</td>
+            <td>AI 量化全流程</td>
+            <td>RD-Agent 自动因子挖掘；20+ 内置模型；数据到回测一站式</td>
+            <td>因子研究 · 选股模型 · 学术研究</td>
+          </tr>
+          <tr>
+            <td><strong>Backtrader</strong></td>
+            <td>20.5K</td>
+            <td>事件驱动回测</td>
+            <td>最成熟、文档最全；支持多时间框架；可直连券商</td>
+            <td>策略回测 · 经典量化 · 入门首选</td>
+          </tr>
+          <tr>
+            <td><strong>FinRL</strong></td>
+            <td>14K</td>
+            <td>深度 RL 交易</td>
+            <td>Gym 风格环境；DRL 算法齐全；学术界广泛使用</td>
+            <td>RL 策略研究 · 高频/日内</td>
+          </tr>
+          <tr>
+            <td><strong>Zipline-Reloaded</strong></td>
+            <td>19K</td>
+            <td>算法交易引擎</td>
+            <td>Quantopian 遗产；Pipeline API 优雅；社区活跃</td>
+            <td>策略开发 · 回测 · 教学</td>
+          </tr>
+          <tr>
+            <td><strong>TradingAgents</strong></td>
+            <td>71.4K</td>
+            <td>多 Agent LLM</td>
+            <td>零代码；13+ LLM；多空辩论；自带记忆</td>
+            <td>LLM 策略实验 · 投研辅助</td>
+          </tr>
+          <tr>
+            <td><strong>FinceptTerminal</strong></td>
+            <td>24.9K</td>
+            <td>桌面终端</td>
+            <td>37 AI Agent；16 家券商；100+ 数据源；C++ 原生</td>
+            <td>全功能金融终端 · 实盘交易</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 美股交易券商 API -->
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">🏦 美股交易常用券商 API</h3>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-icon">🦙</div>
+        <h3>Alpaca Markets</h3>
+        <p>最受开源社区欢迎的美股 API 券商。免佣金交易，REST + WebSocket 双接口，官方 Python SDK，支持纸交易（Paper Trading）环境。</p>
+        <span class="card-tag tag-green">GitHub 项目首选</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🏦</div>
+        <h3>Interactive Brokers (IBKR)</h3>
+        <p>全球最大电子券商，覆盖 150+ 市场。提供 TWS API 和 Client Portal API。专业级功能（期权、期货、外汇），适合机构级策略。</p>
+        <span class="card-tag tag-amber">专业级 · 全球覆盖</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">📈</div>
+        <h3>TD Ameritrade / Schwab</h3>
+        <p>传统大行 API，thinkorswim 平台广受好评。REST API 获取实时报价、历史数据、下单。散户友好。</p>
+        <span class="card-tag tag-blue">传统券商</span>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔗</div>
+        <h3>其他选择</h3>
+        <p>Firstrade（fadacai 项目集成）、Tradier（低延迟）、E*TRADE、Robinhood（非官方 API）。选择取决于策略类型和交易频率。</p>
+        <span class="card-tag tag-green">多样选择</span>
+      </div>
+    </div>
+
+    <!-- 构建建议 -->
+    <h3 style="font-size: 20px; margin: 40px 0 20px;">🛠️ 构建美股交易机器人的推荐路径</h3>
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">1</div>
+      <div class="strategy-body">
+        <h4>确定技术路线</h4>
+        <p><strong>入门：</strong>Backtrader + yfinance + Alpaca 纸交易 — 经典可靠，社区成熟。<br>
+        <strong>进阶：</strong>Qlib + RD-Agent — 自动因子挖掘，微软背书。<br>
+        <strong>前沿：</strong>TradingAgents / Swarm Trader — Multi-Agent LLM 架构，零代码实验。</p>
+      </div>
+    </div>
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">2</div>
+      <div class="strategy-body">
+        <h4>选数据源</h4>
+        <p><strong>免费：</strong>yfinance（日线）+ SEC EDGAR（财报）+ Finnhub（新闻/情绪）。<br>
+        <strong>付费：</strong>Polygon.io（实时逐笔）、Alpha Vantage、Quandl。大多数开源项目的免费数据足以支撑研究阶段。</p>
+      </div>
+    </div>
+    <div class="strategy-card reveal">
+      <div class="strategy-rank">3</div>
+      <div class="strategy-body">
+        <h4>回测 → 纸交易 → 小额实盘</h4>
+        <p>先用 Backtrader/Zipline 回测验证策略逻辑 → Alpaca Paper Trading 模拟真实市场环境（至少 1-3 个月）→ 小额资金（$500-2000）实盘验证。警惕 LLM 的 look-ahead bias：训练数据可能已包含"未来"信息。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 10. 资源汇总 ==================== -->
+  <section class="section reveal" id="resources">
+    <div class="section-header">
+      <div class="section-number">CHAPTER 10</div>
+      <h2 class="section-title">资源汇总</h2>
+      <p class="section-desc">按类别整理的所有参考资源、工具、文章和社区</p>
+    </div>
+
+    <h3 style="font-size: 18px; margin-bottom: 16px;">🔧 官方 SDK & 工具</h3>
+    <div class="resource-grid">
+      <a href="https://github.com/Polymarket/agents" target="_blank" class="resource-card">
+        <span class="resource-icon">🤖</span>
+        <div class="resource-info">
+          <h4>Polymarket/agents</h4>
+          <p>官方 AI 交易代理框架 (Python)</p>
+        </div>
+      </a>
+      <a href="https://github.com/Polymarket/py-clob-client" target="_blank" class="resource-card">
+        <span class="resource-icon">🐍</span>
+        <div class="resource-info">
+          <h4>py-clob-client</h4>
+          <p>官方 Python CLOB 客户端</p>
+        </div>
+      </a>
+      <a href="https://github.com/Polymarket/clob-client-v2" target="_blank" class="resource-card">
+        <span class="resource-icon">📘</span>
+        <div class="resource-info">
+          <h4>clob-client-v2</h4>
+          <p>官方 TypeScript CLOB v2 (推荐新项目)</p>
+        </div>
+      </a>
+      <a href="https://github.com/Polymarket/rs-clob-client" target="_blank" class="resource-card">
+        <span class="resource-icon">🦀</span>
+        <div class="resource-info">
+          <h4>rs-clob-client</h4>
+          <p>官方 Rust 高性能客户端</p>
+        </div>
+      </a>
+      <a href="https://docs.polymarket.com" target="_blank" class="resource-card">
+        <span class="resource-icon">📖</span>
+        <div class="resource-info">
+          <h4>Polymarket 官方文档</h4>
+          <p>API 参考、Token ID 查询、端点说明</p>
+        </div>
+      </a>
+    </div>
+
+    <h3 style="font-size: 18px; margin: 32px 0 16px;">🚀 社区交易机器人</h3>
+    <div class="resource-grid">
+      <a href="https://github.com/zostaff/poly-trading-bot" target="_blank" class="resource-card">
+        <span class="resource-icon">🧠</span>
+        <div class="resource-info">
+          <h4>zostaff/poly-trading-bot</h4>
+          <p>LLM 驱动 · Kelly 仓位 · Streamlit 面板</p>
+        </div>
+      </a>
+      <a href="https://github.com/vladmeer/polymarket-copy-trading-bot" target="_blank" class="resource-card">
+        <span class="resource-icon">👁️</span>
+        <div class="resource-info">
+          <h4>vladmeer/polymarket-copy-trading-bot</h4>
+          <p>实时跟单 Smart Money (★1,140)</p>
+        </div>
+      </a>
+      <a href="https://github.com/warproxxx/poly-maker" target="_blank" class="resource-card">
+        <span class="resource-icon">📊</span>
+        <div class="resource-info">
+          <h4>warproxxx/poly-maker</h4>
+          <p>自动做市 · Google Sheets 配置 (★792)</p>
+        </div>
+      </a>
+      <a href="https://github.com/theo-wq/Polymarket-market-making-bot" target="_blank" class="resource-card">
+        <span class="resource-icon">⚡</span>
+        <div class="resource-info">
+          <h4>theo-wq/Polymarket-market-making-bot</h4>
+          <p>超低延迟做市 &lt;0.15s</p>
+        </div>
+      </a>
+      <a href="https://github.com/SidharthK2/polymarket-agent" target="_blank" class="resource-card">
+        <span class="resource-icon">📱</span>
+        <div class="resource-info">
+          <h4>SidharthK2/polymarket-agent</h4>
+          <p>多代理系统 · Telegram Bot</p>
+        </div>
+      </a>
+      <a href="https://github.com/ShadowSpread/polymarket-auto-trading" target="_blank" class="resource-card">
+        <span class="resource-icon">🔄</span>
+        <div class="resource-info">
+          <h4>ShadowSpread/polymarket-auto-trading</h4>
+          <p>自动跟单 · CLOB 镜像交易 (TypeScript)</p>
+        </div>
+      </a>
+    </div>
+
+    <h3 style="font-size: 18px; margin: 32px 0 16px;">🔬 研究 & 分析工具</h3>
+    <div class="resource-grid">
+      <a href="https://github.com/shiyu-coder/Kronos" target="_blank" class="resource-card">
+        <span class="resource-icon">📈</span>
+        <div class="resource-info">
+          <h4>shiyu-coder/Kronos</h4>
+          <p>金融 K 线基础模型 · AAAI 2026 · OHLCV 预测</p>
+        </div>
+      </a>
+      <a href="https://github.com/Fincept-Corporation/FinceptTerminal" target="_blank" class="resource-card">
+        <span class="resource-icon">💻</span>
+        <div class="resource-info">
+          <h4>FinceptTerminal</h4>
+          <p>Bloomberg 替代品 · 37 AI Agent · 100+ 数据源 (★24.9k)</p>
+        </div>
+      </a>
+      <a href="https://github.com/GoPolymarket/polymarket-go-sdk" target="_blank" class="resource-card">
+        <span class="resource-icon">🔷</span>
+        <div class="resource-info">
+          <h4>polymarket-go-sdk</h4>
+          <p>Go 语言 CLOB SDK · WebSocket · KMS 支持</p>
+        </div>
+      </a>
+    </div>
+
+    <h3 style="font-size: 18px; margin: 32px 0 16px;">📰 深度文章 & 分析</h3>
+    <div class="resource-grid">
+      <a href="https://foresightnews.pro/article/detail/95873" target="_blank" class="resource-card">
+        <span class="resource-icon">🔬</span>
+        <div class="resource-info">
+          <h4>25 个方向，只活了 4 个</h4>
+          <p>最诚实的 Polymarket 策略实战复盘 (中文)</p>
+        </div>
+      </a>
+      <a href="https://foresightnews.pro/article/detail/95601" target="_blank" class="resource-card">
+        <span class="resource-icon">🌤️</span>
+        <div class="resource-info">
+          <h4>天气 Bot 144 倍回报分析</h4>
+          <p>automatedAItradingbot 深度拆解 (中文)</p>
+        </div>
+      </a>
+      <a href="https://www.gate.com/zh/learn/articles/openclaw-is-now-making-tens-of-thousands-a-month-betting-against-humans-on-polymarket" target="_blank" class="resource-card">
+        <span class="resource-icon">🤖</span>
+        <div class="resource-info">
+          <h4>OpenClaw 月入数万美元分析</h4>
+          <p>AI 交易机器人自动套利详解 (中文)</p>
+        </div>
+      </a>
+      <a href="https://www.gate.com/zh/post/status/19039264" target="_blank" class="resource-card">
+        <span class="resource-icon">📋</span>
+        <div class="resource-info">
+          <h4>Polymarket 新规后的机器人构建</h4>
+          <p>费率感知 Maker 机器人指南 (中文)</p>
+        </div>
+      </a>
+      <a href="https://www.htx.com/en-in/news/essential-for-polymarket-developers-18-core-open-source-libr-kJ0AmxUb/" target="_blank" class="resource-card">
+        <span class="resource-icon">📚</span>
+        <div class="resource-info">
+          <h4>18 个核心开源工具库</h4>
+          <p>Polymarket 开发者必备工具清单</p>
+        </div>
+      </a>
+      <a href="https://finance.yahoo.com/markets/options/articles/nothing-ever-happens-bot-always-151603375.html" target="_blank" class="resource-card">
+        <span class="resource-icon">📉</span>
+        <div class="resource-info">
+          <h4>Nothing Ever Happens Bot</h4>
+          <p>只买 No 的策略分析 · 年化 16-33%</p>
+        </div>
+      </a>
+    </div>
+
+    <h3 style="font-size: 18px; margin: 32px 0 16px;">🇺🇸 美股交易机器人资源</h3>
+    <div class="resource-grid">
+      <a href="https://github.com/TauricResearch/TradingAgents" target="_blank" class="resource-card">
+        <span class="resource-icon">🏆</span>
+        <div class="resource-info">
+          <h4>TradingAgents (71.4K⭐)</h4>
+          <p>多 Agent 华尔街投研模拟 · 2026 最火项目</p>
+        </div>
+      </a>
+      <a href="https://github.com/microsoft/qlib" target="_blank" class="resource-card">
+        <span class="resource-icon">🔬</span>
+        <div class="resource-info">
+          <h4>Microsoft Qlib (36K⭐)</h4>
+          <p>微软 AI 量化平台 · RD-Agent 自动因子挖掘</p>
+        </div>
+      </a>
+      <a href="https://github.com/OpenBB-finance/OpenBB" target="_blank" class="resource-card">
+        <span class="resource-icon">💻</span>
+        <div class="resource-info">
+          <h4>OpenBB (62K⭐)</h4>
+          <p>开源 Bloomberg 替代品 · 100+ 数据源</p>
+        </div>
+      </a>
+      <a href="https://github.com/AI4Finance-Foundation/FinRL" target="_blank" class="resource-card">
+        <span class="resource-icon">🎓</span>
+        <div class="resource-info">
+          <h4>FinRL (14K⭐)</h4>
+          <p>深度强化学习交易框架 · 学术标准</p>
+        </div>
+      </a>
+      <a href="https://github.com/mementum/backtrader" target="_blank" class="resource-card">
+        <span class="resource-icon">📊</span>
+        <div class="resource-info">
+          <h4>Backtrader (20.5K⭐)</h4>
+          <p>经典事件驱动回测框架 · 入门首选</p>
+        </div>
+      </a>
+      <a href="https://github.com/zhound420/swarm-trader" target="_blank" class="resource-card">
+        <span class="resource-icon">🐝</span>
+        <div class="resource-info">
+          <h4>Swarm Trader</h4>
+          <p>20 个大师 Agent · SEC EDGAR 数据 · Alpaca</p>
+        </div>
+      </a>
+      <a href="https://github.com/HKUDS/AI-Trader" target="_blank" class="resource-card">
+        <span class="resource-icon">🤖</span>
+        <div class="resource-info">
+          <h4>AI-Trader (港大)</h4>
+          <p>Agent 原生交易平台 · 集体智能协作</p>
+        </div>
+      </a>
+      <a href="https://github.com/SkywalkerJi/nofx" target="_blank" class="resource-card">
+        <span class="resource-icon">🧩</span>
+        <div class="resource-info">
+          <h4>NOFX</h4>
+          <p>可插拔 AI 大脑 · 可视化策略构建器</p>
+        </div>
+      </a>
+      <a href="https://github.com/vibe-trading/vibe" target="_blank" class="resource-card">
+        <span class="resource-icon">💬</span>
+        <div class="resource-info">
+          <h4>Vibe-Trading</h4>
+          <p>自然语言→策略→回测 · 零代码量化</p>
+        </div>
+      </a>
+      <a href="https://github.com/14H034160212/AlphaTrader" target="_blank" class="resource-card">
+        <span class="resource-icon">⚡</span>
+        <div class="resource-info">
+          <h4>AlphaTrader Pro</h4>
+          <p>美股+港股实盘 · Kronos 预测 · 双路径 RL</p>
+        </div>
+      </a>
+      <a href="https://github.com/PAT0216/paper-trader" target="_blank" class="resource-card">
+        <span class="resource-icon">📈</span>
+        <div class="resource-info">
+          <h4>Paper Trader AI</h4>
+          <p>三 ML 策略对比 · 动量 +17.58% · 自动日更</p>
+        </div>
+      </a>
+      <a href="https://github.com/PatrickSUDO/fadacai-portfolio" target="_blank" class="resource-card">
+        <span class="resource-icon">🤖</span>
+        <div class="resource-info">
+          <h4>fadacai-portfolio</h4>
+          <p>Claude Code 投资框架 · MCP 数据 · 第一性原理</p>
+        </div>
+      </a>
+    </div>
+
+    <h3 style="font-size: 18px; margin: 32px 0 16px;">📱 社交媒体 & 社区</h3>
+    <div class="resource-grid">
+      <a href="https://x.com/qkl2058/status/2057772445256523939" target="_blank" class="resource-card">
+        <span class="resource-icon">🐦</span>
+        <div class="resource-info">
+          <h4>@qkl2058 Polymarket 线程</h4>
+          <p>交易机器人策略讨论 (X.com)</p>
+        </div>
+      </a>
+      <a href="https://x.com/Mikocrypto11/status/2058857976786764062" target="_blank" class="resource-card">
+        <span class="resource-icon">🐦</span>
+        <div class="resource-info">
+          <h4>@Mikocrypto11 Polymarket 线程</h4>
+          <p>交易策略与市场分析 (X.com)</p>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <!-- ==================== Footer ==================== -->
+  <footer class="footer">
+    <div class="footer-disclaimer">
+      <strong>⚠️ 免责声明</strong><br>
+      本文档仅供教育和研究参考，不构成任何投资建议。预测市场交易存在重大风险，可能导致全部本金损失。
+      历史盈利数据不代表未来表现。策略一旦公开就会被复制，利润边际将压缩。
+      AI 交易模型普遍存在过度交易和 look-ahead bias 问题，回测数据不等同于实盘表现。
+      CFTC 已将预测市场内幕交易列为执法重点。美股算法交易请遵守 SEC 和 FINRA 相关规定。
+      CFTC 已将预测市场内幕交易列为执法重点，请确保你的交易行为符合所在地区法律法规。
+      Polymarket 禁止美国及部分司法管辖区用户交易，请遵守平台服务条款。
+    </div>
+    <p>预测市场 & 美股量化交易机器人完全指南 · 2026 年 6 月</p>
+    <p style="margin-top: 8px;">基于公开数据、学术研究和社区报告编撰 · 数据来源：Polymarket、GitHub、Foresight News、Gate Learn、HTX Insights、学术论文</p>
+  </footer>
+
+</main>
+
+<script>
+// ========== Sidebar Active State ==========
+const sidebarLinks = document.querySelectorAll('.sidebar-link');
+const sections = document.querySelectorAll('section[id]');
+
+function updateActiveLink() {
+  let current = '';
+  sections.forEach(section => {
+    const sectionTop = section.offsetTop - 100;
+    if (window.scrollY >= sectionTop) {
+      current = section.getAttribute('id');
+    }
+  });
+  sidebarLinks.forEach(link => {
+    link.classList.remove('active');
+    if (link.getAttribute('href') === '#' + current) {
+      link.classList.add('active');
+    }
+  });
+}
+
+window.addEventListener('scroll', updateActiveLink);
+
+// ========== Scroll Reveal ==========
+const revealElements = document.querySelectorAll('.reveal');
+
+function revealOnScroll() {
+  const windowHeight = window.innerHeight;
+  const revealPoint = 100;
+
+  revealElements.forEach(el => {
+    const revealTop = el.getBoundingClientRect().top;
+    if (revealTop < windowHeight - revealPoint) {
+      el.classList.add('visible');
+    }
+  });
+}
+
+window.addEventListener('scroll', revealOnScroll);
+window.addEventListener('load', revealOnScroll);
+revealOnScroll(); // Initial check
+
+// ========== Sidebar Toggle on Mobile (click outside to close) ==========
+document.addEventListener('click', (e) => {
+  const sidebar = document.querySelector('.sidebar');
+  const toggle = document.querySelector('.mobile-nav-toggle');
+  if (window.innerWidth <= 900 && sidebar.classList.contains('open')) {
+    if (!sidebar.contains(e.target) && !toggle.contains(e.target)) {
+      sidebar.classList.remove('open');
+    }
+  }
+});
+
+// ========== Close sidebar on link click (mobile) ==========
+sidebarLinks.forEach(link => {
+  link.addEventListener('click', () => {
+    if (window.innerWidth <= 900) {
+      document.querySelector('.sidebar').classList.remove('open');
+    }
+  });
+});
+</script>
+
+</body>
+</html>

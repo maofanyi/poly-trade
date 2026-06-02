@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polymarket 跟单监控面板</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0e14;--card:#111821;--border:#1c2838;--border-light:#263246;
+  --green:#00e676;--red:#ff3d4f;--amber:#ffab00;--blue:#448aff;
+  --text:#e4ecf5;--muted:#5a6b7d;
+  --scrollbar-track:#0d131c;--scrollbar-thumb:#1c2838;--scrollbar-thumb-hover:#2a3f58;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--scrollbar-track);border-radius:3px}
+::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--scrollbar-thumb-hover)}
+*{scrollbar-width:thin;scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-track)}
+
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans SC','JetBrains Mono',sans-serif;padding:16px 20px;min-height:100vh}
+h1{font-size:18px;margin-bottom:2px;color:var(--green);font-family:'JetBrains Mono',monospace;letter-spacing:1px}
+.sub{font-size:12px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.5s ease infinite;margin-right:4px}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;margin-bottom:14px}
+.tab{padding:7px 18px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--muted);cursor:pointer;font-family:inherit;font-size:13px;transition:all 0.2s}
+.tab:hover{border-color:var(--border-light);color:var(--text)}
+.tab.active{border-color:var(--green);color:var(--green);background:rgba(0,230,118,0.06)}
+
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* Summary */
+.summary-bar{display:flex;gap:24px;padding:12px 18px;margin-bottom:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap}
+.summary-item{display:flex;flex-direction:column;gap:2px}
+.summary-label{font-size:11px;color:var(--muted)}
+.summary-value{font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.green{color:var(--green)}.red{color:var(--red)}.amber{color:var(--amber)}
+
+/* Filter */
+.filter-bar{display:flex;gap:6px;margin-bottom:12px;align-items:center}
+.filter-btn{padding:5px 14px;border:1px solid var(--border);border-radius:5px;background:var(--card);color:var(--muted);cursor:pointer;font-family:inherit;font-size:12px;transition:all 0.2s}
+.filter-btn:hover{border-color:var(--border-light);color:var(--text)}
+.filter-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,230,118,0.06)}
+
+/* P&L Cards */
+.pnl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:8px;margin-bottom:12px}
+.pnl-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;transition:all 0.2s}
+.pnl-card:hover{border-color:var(--border-light)}
+.pnl-card.win{border-left:3px solid var(--green)}.pnl-card.loss{border-left:3px solid var(--red)}.pnl-card.neutral{border-left:3px solid var(--muted)}
+.pnl-rank{font-size:18px;font-weight:900;font-family:'JetBrains Mono',monospace;min-width:24px;color:var(--muted);text-align:center}
+.pnl-rank.top1{color:var(--amber);font-size:22px}.pnl-rank.top2{color:#b0bec5;font-size:20px}.pnl-rank.top3{color:#a1887f;font-size:18px}
+.pnl-info{flex:1;overflow:hidden}
+.pnl-name{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnl-cat{font-size:11px;color:var(--muted)}
+.pnl-nums{text-align:right;flex-shrink:0}
+.pnl-value{font-size:15px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.pnl-pct{font-size:12px;font-family:'JetBrains Mono',monospace}
+
+/* Wallet Discovery Table */
+.wallet-table-wrap{overflow-x:auto;max-height:500px;overflow-y:auto;border:1px solid var(--border);border-radius:8px}
+.wallet-table{width:100%;border-collapse:collapse;font-size:13px}
+.wallet-table thead{position:sticky;top:0;z-index:1}
+.wallet-table th{padding:10px 14px;text-align:left;background:var(--card);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace}
+.wallet-table td{padding:9px 14px;border-bottom:1px solid rgba(28,40,56,0.3)}
+.wallet-table tbody tr:hover td{background:rgba(0,230,118,0.03)}
+.wallet-table .addr{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+.wallet-table .name-cell{font-weight:600}
+.wallet-table .cat-tag{font-size:10px;padding:2px 8px;border-radius:100px;font-weight:600;white-space:nowrap}
+.cat-tag.w{background:rgba(0,230,118,0.12);color:var(--green)}
+.cat-tag.p{background:rgba(68,138,255,0.12);color:var(--blue)}
+.cat-tag.s{background:rgba(255,171,0,0.12);color:var(--amber)}
+.cat-tag.t{background:rgba(187,134,252,0.12);color:#bb86fc}
+.cat-tag.c{background:rgba(255,61,79,0.12);color:var(--red)}
+.btn-xs{padding:4px 12px;border:1px solid var(--green);border-radius:4px;background:rgba(0,230,118,0.08);color:var(--green);cursor:pointer;font-family:inherit;font-size:11px;transition:all 0.2s;white-space:nowrap}
+.btn-xs:hover{background:rgba(0,230,118,0.18)}
+.btn-xs.remove{border-color:var(--red);color:var(--red);background:rgba(255,61,79,0.06)}
+.btn-xs.remove:hover{background:rgba(255,61,79,0.15)}
+.btn-xs.monitoring{border-color:var(--muted);color:var(--muted);cursor:default}
+
+.search-input{width:100%;max-width:300px;padding:7px 12px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;outline:none}
+.search-input:focus{border-color:var(--green)}
+.search-input::placeholder{color:var(--muted)}
+
+/* Trade Cards */
+.section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin:16px 0 10px;padding-left:8px;border-left:2px solid var(--green);display:flex;align-items:center;gap:8px}
+.trade-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:10px}
+.trade-card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.trade-card-header{padding:9px 14px;background:rgba(0,0,0,0.25);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.trade-card-name{font-weight:700;font-size:12px}
+.trade-card-body{max-height:170px;overflow-y:auto;padding:4px 0}
+.trade-row{display:grid;grid-template-columns:32px 50px 1fr 60px 60px 50px;gap:4px;padding:4px 10px;font-size:11px;align-items:center;border-bottom:1px solid rgba(28,40,56,0.3);font-family:'JetBrains Mono',monospace}
+.trade-slip{text-align:right;font-size:10px}
+.trade-slip.red{color:var(--red)}.trade-slip.green{color:var(--green)}
+.trade-row:hover{background:rgba(0,230,118,0.03)}
+.trade-side{font-weight:700;text-align:center;padding:1px 3px;border-radius:2px;font-size:9px}
+.side-BUY{background:rgba(0,230,118,0.12);color:var(--green)}.side-SELL{background:rgba(255,61,79,0.12);color:var(--red)}
+.trade-qty{text-align:right}.trade-market{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:10px}
+.trade-usd{text-align:right;color:var(--green);font-weight:600}
+.trade-status{text-align:right;font-size:9px;padding:1px 4px;border-radius:3px}
+.status-placed{color:var(--green);background:rgba(0,230,118,0.08)}.status-skipped{color:var(--amber);background:rgba(255,171,0,0.08)}
+.status-failed{color:var(--red);background:rgba(255,61,79,0.08)}.status-hist{color:var(--muted)}.status-dry{color:var(--muted)}
+.empty{text-align:center;padding:30px;color:var(--muted);font-size:13px}
+.status-footer{font-size:11px;padding:14px 0;text-align:center;color:var(--muted);font-family:'JetBrains Mono',monospace}
+
+@media(max-width:700px){
+  body{padding:10px}.summary-bar{gap:14px}.summary-value{font-size:16px}
+  .pnl-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+  .trade-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<h1>◆ Polymarket 跟单监控面板</h1>
+<div class="sub">
+  <span><span class="pulse"></span>实时监控中</span>
+  <span id="clock" style="font-size:11px;color:var(--muted)"></span>
+  <span style="font-size:11px;color:var(--muted)" id="activeCount"></span>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('monitor')">📊 监控面板</button>
+  <button class="tab" onclick="switchTab('discover')">🔍 钱包发现</button>
+</div>
+
+<!-- ===== TAB 1: MONITOR ===== -->
+<div class="tab-content active" id="tab-monitor">
+
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('all',this)">全部</button>
+    <button class="filter-btn" onclick="setFilter('today',this)">今日</button>
+    <button class="filter-btn" onclick="setFilter('week',this)">本周</button>
+    <button class="filter-btn" onclick="setFilter('month',this)">本月</button>
+    <span class="section-count" id="filterRange" style="font-size:10px;color:var(--muted);margin-left:8px"></span>
+  </div>
+
+  <div class="summary-bar">
+    <div class="summary-item"><span class="summary-label">总本金</span><span class="summary-value" id="stotalCapital">—</span></div>
+    <div class="summary-item"><span class="summary-label">可用现金</span><span class="summary-value" id="scash">—</span></div>
+    <div class="summary-item"><span class="summary-label">已使用</span><span class="summary-value amber" id="sdeployed">—</span></div>
+    <div class="summary-item"><span class="summary-label">总市值</span><span class="summary-value green" id="stotalValue">—</span></div>
+    <div class="summary-item"><span class="summary-label">总盈亏</span><span class="summary-value" id="stotalpnl">—</span></div>
+    <div class="summary-item"><span class="summary-label">最后扫描</span><span class="summary-value" id="slast" style="font-size:12px;">—</span></div>
+  </div>
+
+  <div class="pnl-grid" id="pnlGrid"></div>
+  <div class="section-title">📋 交易明细 <span class="section-count" id="filterLabel"></span></div>
+  <div class="trade-grid" id="tradeGrid"></div>
+</div>
+
+<!-- ===== TAB 2: WALLET DISCOVERY ===== -->
+<div class="tab-content" id="tab-discover">
+
+  <div class="filter-bar" style="margin-bottom:10px;">
+    <input class="search-input" id="walletSearch" placeholder="搜索钱包名称或地址..." oninput="renderDiscoverTable()">
+    <button class="filter-btn active" onclick="filterDiscover('all',this)">全部</button>
+    <button class="filter-btn" onclick="filterDiscover('Weather',this)">天气</button>
+    <button class="filter-btn" onclick="filterDiscover('Politics',this)">政治</button>
+    <button class="filter-btn" onclick="filterDiscover('Sports',this)">体育</button>
+    <button class="filter-btn" onclick="filterDiscover('Tech',this)">科技</button>
+    <button class="filter-btn" onclick="filterDiscover('Culture',this)">文化</button>
+  </div>
+
+  <div class="wallet-table-wrap">
+    <table class="wallet-table">
+      <thead>
+        <tr><th>状态</th><th>钱包</th><th>地址</th><th>类别</th><th>胜率</th><th>盈利</th><th>操作</th></tr>
+      </thead>
+      <tbody id="discoverBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="status-footer">数据源: copy_trader_state.json · 自动刷新 5s</div>
+
+<script>
+// ===== CONSTANTS =====
+const INITIAL_CAPITAL = 500;
+const STATE_URL = 'copy_trader_state.json';
+const CAT_NAMES = {'Weather':'天气','Politics':'政治','Sports':'体育','Tech':'科技','Culture':'文化'};
+const STORAGE_KEY = 'copy_trader_wallets';
+
+// ===== CANDIDATE WALLET POOL (26 verified addresses) =====
+const CANDIDATE_WALLETS = [
+  // Weather (6)
+  {name:'HondaCivic',addr:'0x15ceffed7bf820cd2d90f90ea24ae9909f5cd5fa',cat:'Weather',winRate:'85.7%',profit:'$48K',note:'3000+仓位'},
+  {name:'ikik111',addr:'0x57ee70867b4e387de9de34fd62bc685aa02a8112',cat:'Weather',winRate:'—',profit:'$50K',note:'3300+市场,盈亏比3.54'},
+  {name:'Maskache2',addr:'0x1f66796b45581868376365aef54b51eb84184c8d',cat:'Weather',winRate:'30%',profit:'$27K',note:'盈亏比3.74'},
+  {name:'JoeTheMeteorologist',addr:'0x1838cca016850ac7185a9b149fe7d0bd2d6629b4',cat:'Weather',winRate:'—',profit:'$77K',note:'真气象学家'},
+  {name:'BeefSlayer',addr:'0x331bf91c132af9d921e1908ca0979363fc47193f',cat:'Weather',winRate:'67%',profit:'$49K',note:'99%收入来自天气'},
+  {name:'Varyage',addr:'0xd75d96a23515172778d3281f53c9180b985100c8',cat:'Weather',winRate:'78%',profit:'—',note:'每天仅2笔,低频稳健'},
+  // Politics (5)
+  {name:'wokerjoesleeper',addr:'0x63d43bbb87f85af03b8f2f9e2fad7b54334fa2f',cat:'Politics',winRate:'81%',profit:'$900K',note:'低概率市场胜率81%'},
+  {name:'Frank0951',addr:'0x40471b34671887546013ceb58740625c2efe7293',cat:'Politics',winRate:'62.8%',profit:'$290K',note:'横跨电竞+政治'},
+  {name:'cowcat',addr:'0x38e59b36aae31b164200d0cad7c3fe5e0ee795e7',cat:'Politics',winRate:'>88%',profit:'$200K',note:'中东地缘专家'},
+  {name:'ScottyNooo',addr:'0xbacd00c9080a82ded56f504ee8810af732b0ab35',cat:'Politics',winRate:'58.8%',profit:'$1.3M',note:'单地址最高盈利'},
+  {name:'HowDareYou',addr:'0x4bbe10ba5b7f6df147c0dae17b46c44a6e562cf3',cat:'Politics',winRate:'100%',profit:'$277K',note:'Trump子赛道'},
+  // Sports (5)
+  {name:'ewelmealt',addr:'0x07921379f7b31ef93da634b688b2fe36897db778',cat:'Sports',winRate:'~100%',profit:'$900K',note:'19天赚$86万,低频高确信'},
+  {name:'EFFICIENCYEXPERT',addr:'0x8c0b024c17831a0dde038547b7e791ae6a0d7aa5',cat:'Sports',winRate:'—',profit:'$580K',note:'电竞+多体育'},
+  {name:'middleoftheocean',addr:'0x6c743aafd813475986dcd930f380a1f50901bd4e',cat:'Sports',winRate:'83.1%',profit:'$470K',note:'足球专家'},
+  {name:'synnet',addr:'0x8e0b7ae246205b1ddf79172148a58a3204139e5c',cat:'Sports',winRate:'—',profit:'$290K',note:'ATP网球全榜第一'},
+  {name:'CKW',addr:'0x92672c80d36dcd08172aa1e51dface0f20b70f9a',cat:'Sports',winRate:'—',profit:'—',note:'UFC,$74M交易量'},
+  // Tech (5)
+  {name:'GeorgeSmiley',addr:'0x2110ba2a1e18840109482ff4ddc547baeff45850',cat:'Tech',winRate:'76.1%',profit:'—',note:'AI产品发布节奏'},
+  {name:'Optimus',addr:'0xd5b97d08ec6098407bfbf66c2786ccc9967fe44e',cat:'Tech',winRate:'>60%',profit:'$73K',note:'跨赛道'},
+  {name:'BobInvestments',addr:'0x41816fc1ebdfeb33f6356f2655ab499253b3de86',cat:'Tech',winRate:'75%',profit:'—',note:'低概率廉价份额'},
+  {name:'DerDon',addr:'0xf797d4d1c038d1eb0593edae0e66bf8e4b2e0bf',cat:'Tech',winRate:'75%',profit:'$38K',note:'科技专精'},
+  {name:'Mujurry',addr:'0x5ecde7348ea5100af4360dd7a6e0a3fb1d420787',cat:'Tech',winRate:'>80%',profit:'$170K',note:'日200+笔高频'},
+  // Culture (5)
+  {name:'BigChungus',addr:'0x06dcaa14f57d8a0573f5dc5940565e6de667af59',cat:'Culture',winRate:'73.7%',profit:'—',note:'高概率分散'},
+  {name:'TheRedChip',addr:'0xdf6da574f8b0c0ce5e01ddb1c5a49b87993e9c5c',cat:'Culture',winRate:'45%',profit:'$100K',note:'风险回报比2.91'},
+  {name:'GUHHH',addr:'0x033dc6e3e3e0a3ae55402576990392ae910aaf05',cat:'Culture',winRate:'77.9%',profit:'—',note:'69%仓位做空NO'},
+  {name:'BeN',addr:'0x668d85d791049bf0100e557a72c7ed4dc97297d2',cat:'Culture',winRate:'67.3%',profit:'—',note:'最大回撤仅$4,446'},
+  {name:'pol76',addr:'0x36e7e560c4d4cf32926906d939a18cf91f8a0b6b',cat:'Culture',winRate:'72.9%',profit:'—',note:'83%仓位押NO'},
+];
+
+// ===== ACTIVE WALLETS =====
+function getActive() {
+  try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) || getDefaultWallets(); }
+  catch(e){ return getDefaultWallets(); }
+}
+function getDefaultWallets() {
+  return [
+    {name:'HondaCivic',addr:'0x15ceffed7bf820cd2d90f90ea24ae9909f5cd5fa',cat:'Weather'},
+    {name:'ikik111',addr:'0x57ee70867b4e387de9de34fd62bc685aa02a8112',cat:'Weather'},
+    {name:'Maskache2',addr:'0x1f66796b45581868376365aef54b51eb84184c8d',cat:'Weather'},
+    {name:'JoeTheMeteorologist',addr:'0x1838cca016850ac7185a9b149fe7d0bd2d6629b4',cat:'Weather'},
+    {name:'BeefSlayer',addr:'0x331bf91c132af9d921e1908ca0979363fc47193f',cat:'Weather'},
+    {name:'Varyage',addr:'0xd75d96a23515172778d3281f53c9180b985100c8',cat:'Weather'},
+    {name:'wokerjoesleeper',addr:'0x63d43bbb87f85af03b8f2f9e2fad7b54334fa2f',cat:'Politics'},
+    {name:'cowcat',addr:'0x38e59b36aae31b164200d0cad7c3fe5e0ee795e7',cat:'Politics'},
+    {name:'ewelmealt',addr:'0x07921379f7b31ef93da634b688b2fe36897db778',cat:'Sports'},
+    {name:'EFFICIENCYEXPERT',addr:'0x8c0b024c17831a0dde038547b7e791ae6a0d7aa5',cat:'Sports'},
+  ];
+}
+function saveActive(list) { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
+
+// ===== STATE =====
+let currentFilter = 'all', stateCache = null, discoverFilter = 'all';
+function isActive(addr) { return getActive().some(w => w.addr === addr); }
+
+// ===== DISCOVER TABLE =====
+function renderDiscoverTable() {
+  const search = (document.getElementById('walletSearch')?.value || '').toLowerCase();
+  const active = getActive();
+  const activeAddrs = new Set(active.map(w => w.addr));
+  let filtered = CANDIDATE_WALLETS;
+  if (discoverFilter !== 'all') filtered = filtered.filter(w => w.cat === discoverFilter);
+  if (search) filtered = filtered.filter(w => w.name.toLowerCase().includes(search) || w.addr.toLowerCase().includes(search));
+
+  document.getElementById('discoverBody').innerHTML = filtered.map(w => {
+    const monitoring = activeAddrs.has(w.addr);
+    const actionBtn = monitoring
+      ? `<button class="btn-xs remove" onclick="removeWallet('${w.addr}')">移除</button>`
+      : `<button class="btn-xs" onclick="addWallet('${w.addr}','${w.name}','${w.cat}')">+ 添加跟单</button>`;
+    return `<tr>
+      <td>${monitoring ? '<span style="color:var(--green);font-weight:700;">● 监控中</span>' : '<span style="color:var(--muted);">○</span>'}</td>
+      <td class="name-cell">${w.name}</td>
+      <td class="addr" title="${w.addr}">${w.addr.slice(0,6)}...${w.addr.slice(-4)}</td>
+      <td><span class="cat-tag ${w.cat[0].toLowerCase()}">${CAT_NAMES[w.cat]||w.cat}</span></td>
+      <td>${w.winRate}</td>
+      <td style="color:var(--green);">${w.profit}</td>
+      <td>${actionBtn}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('activeCount').textContent = `监控中: ${active.length} 个钱包`;
+}
+
+function filterDiscover(cat, btn) {
+  discoverFilter = cat;
+  document.querySelectorAll('#tab-discover .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderDiscoverTable();
+}
+
+async function syncToServer(list) {
+  try {
+    await fetch('http://localhost:8766/save_wallets', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(list)
+    });
+    return true;
+  } catch(e) { return false; }
+}
+
+async function addWallet(addr, name, cat) {
+  const active = getActive();
+  if (active.some(w => w.addr === addr)) return;
+  active.push({name, addr, cat});
+  saveActive(active);
+  renderDiscoverTable();
+  const ok = await syncToServer(active);
+  showToast(ok ? '已添加: ' + name + ' (生效中)' : '已添加: ' + name + ' (需重启监控)');
+}
+
+async function removeWallet(addr) {
+  let active = getActive().filter(w => w.addr !== addr);
+  saveActive(active);
+  renderDiscoverTable();
+  const ok = await syncToServer(active);
+  showToast(ok ? '已移除 (生效中)' : '已移除 (需重启监控)');
+}
+
+// ===== TABS =====
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'discover') renderDiscoverTable();
+}
+
+// ===== TIME FILTER =====
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('#tab-monitor .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (stateCache) render(stateCache);
+}
+function filterTime(trades) {
+  if (currentFilter === 'all') return trades;
+  const now = new Date();
+  let cutoff;
+  if (currentFilter === 'today') cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  else if (currentFilter === 'week') cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+  else if (currentFilter === 'month') cutoff = new Date(now.getFullYear(), now.getMonth(), 1);
+  return trades.filter(t => { const ts = t.timestamp ? new Date(t.timestamp) : null; return ts && !isNaN(ts.getTime()) ? ts >= cutoff : true; });
+}
+
+// ===== LOAD & RENDER =====
+async function load() {
+  try { const resp = await fetch(STATE_URL + '?t=' + Date.now()); if (!resp.ok) throw new Error('empty'); return await resp.json(); }
+  catch(e) { return null; }
+}
+
+function render(state) {
+  if (!state) {
+    document.getElementById('pnlGrid').innerHTML = '<div class="empty">监控未运行，请启动: python copy_trader.py</div>';
+    return;
+  }
+  stateCache = state;
+  const simTrades = state.sim_trades || [];
+  const walletPnl = state.wallet_pnl || {};
+  // Only show actionable trades (not SKIPPED/HISTORICAL from closed markets)
+  const actionable = simTrades.filter(t => t.status === 'FILLED' || t.status === 'LIMIT_PLACED' || t.status === 'DRY_RUN');
+  const skipped = simTrades.filter(t => t.status === 'SKIPPED' || t.status === 'HISTORICAL' || t.status === 'FAILED');
+  const filtered = filterTime(actionable);
+
+  // Summary
+  let totalCash=0, totalValue=0, totalPnl=0, totalCapital=0;
+  Object.entries(walletPnl).forEach(([_,p]) => {
+    totalCash += p.cash||0; totalValue += p.total_value||0;
+    totalPnl += p.pnl||0; totalCapital += p.capital||INITIAL_CAPITAL;
+  });
+  document.getElementById('stotalCapital').textContent = '$' + totalCapital.toFixed(0);
+  document.getElementById('scash').textContent = '$' + totalCash.toFixed(2);
+  document.getElementById('sdeployed').textContent = '$' + (totalCapital-totalCash).toFixed(2) + ' (' + (totalCapital>0?((totalCapital-totalCash)/totalCapital*100).toFixed(1):0) + '%)';
+  document.getElementById('stotalValue').textContent = '$' + totalValue.toFixed(2);
+  const pe = document.getElementById('stotalpnl');
+  pe.textContent = (totalPnl>=0?'+':'')+'$'+totalPnl.toFixed(2);
+  pe.className = 'summary-value '+(totalPnl>=0?'green':'red');
+  document.getElementById('slast').textContent = state.last_scan || '首次扫描中...';
+  document.getElementById('filterLabel').textContent =
+    `(${filtered.length} 笔已成交${skipped.length > 0 ? ' | ' + skipped.length + ' 笔跳过/失败' : ''})`;
+  // Show monitor start time
+  if (state.monitor_start && filtered.length === 0) {
+    document.getElementById('filterRange').textContent =
+      `· 监控启动: ${state.monitor_start} · 等待新交易中...`;
+  }
+
+  // Date range
+  if (filtered.length > 0) {
+    const dates = filtered.map(t=>t.timestamp).filter(Boolean).map(ts=>new Date(ts)).filter(d=>!isNaN(d.getTime()));
+    if (dates.length > 0) {
+      const mn = new Date(Math.min(...dates)), mx = new Date(Math.max(...dates));
+      document.getElementById('filterRange').textContent =
+        `· ${mn.toLocaleDateString('zh-CN')} ~ ${mx.toLocaleDateString('zh-CN')}`;
+    }
+  } else { document.getElementById('filterRange').textContent = ''; }
+
+  // P&L Cards
+  const sortedPnl = Object.entries(walletPnl).sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
+  let pnlHtml = '';
+  if (sortedPnl.length === 0) {
+    pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无盈亏数据</div>';
+  } else {
+    sortedPnl.forEach(([name,p],idx) => {
+      const cls = p.pnl_pct > 0.5 ? 'win' : (p.pnl_pct < -0.5 ? 'loss' : 'neutral');
+      const sign = p.pnl_pct>=0?'+':''; const pc = p.pnl_pct>=0?'green':'red';
+      const rc = idx===0?'top1':(idx===1?'top2':(idx===2?'top3':''));
+      pnlHtml += `<div class="pnl-card ${cls}">
+        <span class="pnl-rank ${rc}">${idx+1}</span>
+        <div class="pnl-info">
+          <div class="pnl-name">${name}</div>
+          <div class="pnl-cat">${CAT_NAMES[p.category]||p.category} | 现金$${p.cash?.toFixed(0)||'?'} | 持仓$${((p.total_value||0)-(p.cash||0)).toFixed(0)}</div>
+        </div>
+        <div class="pnl-nums">
+          <div class="pnl-value">$${p.total_value.toFixed(2)}</div>
+          <div class="pnl-pct ${pc}">${sign}${p.pnl_pct.toFixed(2)}%</div>
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById('pnlGrid').innerHTML = pnlHtml;
+
+  // Trade cards - merge server data (wallet_pnl) with local config
+  const active = getActive();
+  const serverWallets = Object.keys(walletPnl);
+  // Build unified wallet list: server data takes priority, fill missing cats from local
+  const allWallets = serverWallets.length > 0
+    ? serverWallets.map(name => {
+        const local = active.find(w => w.name === name);
+        const cat = walletPnl[name]?.category || local?.cat || 'Crypto';
+        return {name, cat};
+      })
+    : active;  // fallback to local if server returns nothing
+  const walletTrades = {};
+  filtered.forEach(t => { const w = t.wallet||'?'; if(!walletTrades[w]) walletTrades[w]=[]; walletTrades[w].push(t); });
+  let tradeHtml = '';
+  allWallets.forEach(w => {
+    const wt = (walletTrades[w.name]||[]).slice(-8).reverse();
+    const np = walletPnl[w.name];
+    const metaStr = np ? `市值$${np.total_value?.toFixed(0)||'?'} ${np.pnl_pct>=0?'+':''}${np.pnl_pct?.toFixed(1)||'?'}%` : '';
+    tradeHtml += `<div class="trade-card">
+      <div class="trade-card-header">
+        <span class="trade-card-name">${w.name} <span style="color:var(--muted);font-weight:400;font-size:10px;">${metaStr}</span></span>
+        <span class="cat-tag ${(w.cat||'Weather')[0].toLowerCase()}">${CAT_NAMES[w.cat]||w.cat}</span>
+      </div>
+      <div class="trade-card-body">`;
+    if (wt.length===0) tradeHtml += `<div class="empty">等待新交易...<br><span style="font-size:9px;color:var(--muted)">监控自 ${state.monitor_start||'启动'}</span></div>`;
+    else wt.forEach(t => {
+      const st = t.status||''; let sl='',sc='status-hist';
+      if (st==='FILLED'){sl='已成交';sc='status-placed'}
+      else if (st==='LIMIT_PLACED'){sl='已挂单';sc='status-placed'}
+      else if (st==='SKIPPED'){sl='已跳过';sc='status-skipped'}
+      else if (st==='HISTORICAL'){sl='历史';sc='status-hist'}
+      else if (st==='FAILED'){sl='失败';sc='status-failed'}
+      tradeHtml += `<div class="trade-row">
+        <span class="trade-side side-${t.side||'?'}">${t.side==='BUY'?'买':'卖'}</span>
+        <span class="trade-qty">${(t.size||0).toFixed(0)}</span>
+        <span class="trade-market">${(t.slug||'').slice(0,35)}</span>
+        <span class="trade-usd">$${(t.sim_usd||0).toFixed(2)}</span>
+        <span class="trade-slip ${(t.whale_slippage||0)<0.01?"green":"red"}">${t.whale_slippage!=null?"$"+t.whale_slippage.toFixed(4):"—"}</span>
+        <span class="trade-status ${sc}">${sl}</span>
+      </div>`;
+    });
+    tradeHtml += '</div></div>';
+  });
+  document.getElementById('tradeGrid').innerHTML = tradeHtml || '<div class="empty">添加钱包后开始监控</div>';
+}
+
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id='toast'; t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--green);padding:10px 20px;border-radius:6px;font-size:12px;color:var(--green);z-index:999;transition:opacity 0.3s;pointer-events:none'; document.body.appendChild(t); }
+  t.textContent = msg; t.style.opacity = '1';
+  setTimeout(()=>t.style.opacity='0', 2000);
+}
+
+// ===== INIT =====
+function updateClock() { document.getElementById('clock').textContent = new Date().toLocaleString('zh-CN',{hour12:false}); }
+setInterval(updateClock,1000); updateClock();
+
+async function refresh() { const state = await load(); if (state) render(state); }
+refresh(); setInterval(refresh, 5000);
+renderDiscoverTable();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+*.pyc
+__pycache__/
+*.log
+/tmp/
+*.db
+*.sqlite
+.DS_Store
+copy_trader_state.json
+wallets_active.json
+monitor_log.txt
+ta_results*.json
+.nohup

@@ -398,9 +398,9 @@ def main():
         elapsed = (datetime.now() - scan_start).total_seconds()
 
         # Full P&L refresh every 3rd scan, or if new trades found
-        if total_new > 0 or scan_count % 3 == 0:
-            state['wallet_pnl'] = get_all_pnl(realized_pnl)
-            state['realized_pnl'] = dict(realized_pnl)
+        # Always refresh P&L every scan (single source of truth)
+        state['wallet_pnl'] = get_all_pnl(realized_pnl)
+        state['realized_pnl'] = dict(realized_pnl)
 
         state['last_scan'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         save_state(state)

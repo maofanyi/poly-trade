@@ -402,19 +402,9 @@ function filterTime(trades) {
 // ===== LOAD & RENDER =====
 async function load() {
   try {
-    const [stateResp, pnlResp] = await Promise.all([
-      fetch(STATE_URL + '?t=' + Date.now()),
-      fetch('live_pnl.json?t=' + Date.now())
-    ]);
-    if (!stateResp.ok) throw new Error('empty');
-    const data = await stateResp.json();
-    if (pnlResp.ok) {
-      try {
-        const live = await pnlResp.json();
-        if (live && Object.keys(live).length > 3) data.wallet_pnl = live;
-      } catch(e) {}
-    }
-    return data;
+    const resp = await fetch(STATE_URL + '?t=' + Date.now());
+    if (!resp.ok) throw new Error('empty');
+    return await resp.json();
   } catch(e) { return null; }
 }
 

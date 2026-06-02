@@ -15,7 +15,12 @@ def get_db() -> sqlite3.Connection:
     """Get thread-local database connection."""
     if not hasattr(_local, 'db') or _local.db is None:
         _ensure_data_dir()
-        _local.db = sqlite3.connect(DB_PATH)
+        if DB_PATH == ':memory:':
+            import urllib.parse
+            uri = 'file:memory?cache=shared&mode=memory'
+            _local.db = sqlite3.connect(uri, uri=True)
+        else:
+            _local.db = sqlite3.connect(DB_PATH)
         _local.db.row_factory = sqlite3.Row
         _local.db.execute("PRAGMA journal_mode=WAL")
         _local.db.execute("PRAGMA foreign_keys=ON")

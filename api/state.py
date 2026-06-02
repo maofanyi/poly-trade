@@ -79,7 +79,7 @@ def get_alert_config():
 @router.put("/alerts")
 def update_alert_config(data: AlertConfigUpdate):
     db = get_db()
-    alerts_update_config(db, **{k: v for k, v in data.dict().items() if v is not None})
+    alerts_update_config(db, **{k: v for k, v in data.model_dump().items() if v is not None})
     return {"ok": True}
 
 @router.get("/health")

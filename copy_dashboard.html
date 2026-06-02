@@ -154,6 +154,8 @@ h1{font-size:18px;margin-bottom:2px;color:var(--green);font-family:'JetBrains Mo
   <div class="pnl-grid" id="pnlGrid"></div>
   <div class="section-title">📋 交易明细 <span class="section-count" id="filterLabel"></span></div>
   <div class="trade-grid" id="tradeGrid"></div>
+  <div class="section-title" id="inactiveTitle" style="display:none;">📦 未激活钱包 (<span id="inactiveCount">0</span>)</div>
+  <div class="trade-grid" id="inactiveGrid"></div>
 </div>
 
 <!-- ===== TAB 2: WALLET DISCOVERY ===== -->
@@ -541,13 +543,15 @@ function render(state) {
     return h;
   }
 
-  let tradeHtml = activeW.map(w => renderTradeCard(w)).join('');
+  document.getElementById('tradeGrid').innerHTML = activeW.map(w => renderTradeCard(w)).join('') || '<div class="empty">暂无活跃交易</div>';
   if (inactiveW.length > 0) {
-    tradeHtml += '<div class="section-title" id="inactiveToggle" onclick="var n=this.nextElementSibling;var v=n.style.display===\x27none\x27;n.style.display=v?\x27\x27:\x27none\x27;this.textContent=v?\x27📦 未激活钱包 ('+inactiveW.length+') ▲\x27:\x27📦 未激活钱包 ('+inactiveW.length+') — 点击展开\x27;" style="cursor:pointer;user-select:none;">'
-      + '📦 未激活钱包 ('+inactiveW.length+') — 点击展开</div>';
-    tradeHtml += '<div style="display:none;">'+inactiveW.map(w => renderTradeCard(w)).join('')+'</div>';
+    document.getElementById('inactiveTitle').style.display = '';
+    document.getElementById('inactiveCount').textContent = inactiveW.length;
+    document.getElementById('inactiveGrid').innerHTML = inactiveW.map(w => renderTradeCard(w)).join('');
+  } else {
+    document.getElementById('inactiveTitle').style.display = 'none';
+    document.getElementById('inactiveGrid').innerHTML = '';
   }
-  document.getElementById('tradeGrid').innerHTML = tradeHtml || '<div class="empty">添加钱包后开始监控</div>';
 }
 
 function showToast(msg) {

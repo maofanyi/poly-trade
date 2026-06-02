@@ -500,12 +500,6 @@ function render(state) {
     name: w.name,
     cat: walletPnl[w.name]?.category || w.cat || 'Unknown'
   }));
-  // Also include any server-only wallets not in local (won't happen after remove)
-  Object.keys(walletPnl).forEach(name => {
-    if (!activeNames.has(name)) {
-      allWallets.push({name, cat: walletPnl[name]?.category || 'Unknown'});
-    }
-  });
   const walletTrades = {};
   filtered.forEach(t => { const w = t.wallet||'?'; if(!walletTrades[w]) walletTrades[w]=[]; walletTrades[w].push(t); });
   let tradeHtml = '';

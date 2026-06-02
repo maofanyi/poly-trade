@@ -146,7 +146,7 @@ h1{font-size:18px;margin-bottom:2px;color:var(--green);font-family:'JetBrains Mo
     <div class="summary-item"><span class="summary-label">已使用</span><span class="summary-value amber" id="sdeployed">—</span></div>
     <div class="summary-item"><span class="summary-label">总市值</span><span class="summary-value green" id="stotalValue">—</span></div>
     <div class="summary-item"><span class="summary-label">累计盈亏</span><span class="summary-value" id="stotalpnl">—</span></div>
-	    <div class="summary-item"><span class="summary-label">持仓市值</span><span class="summary-value amber" id="sposValue">—</span></div>
+	    <div class="summary-item"><span class="summary-label">已实现盈亏</span><span class="summary-value amber" id="sposValue">—</span></div>
 	    <div class="summary-item"><span class="summary-label">盈亏%</span><span class="summary-value" id="stotalpnlPct">—</span></div>
     <div class="summary-item"><span class="summary-label">最后扫描</span><span class="summary-value" id="slast" style="font-size:12px;">—</span></div>
   </div>
@@ -419,18 +419,20 @@ function render(state) {
   const filtered = filterTime(actionable);
 
   // Summary
-  let totalCash=0, totalValue=0, totalPnl=0, totalCapital=0, totalPositions=0;
+  let totalCash=0, totalValue=0, totalPnl=0, totalCapital=0, totalPositions=0, totalRealized=0, totalUnrealized=0;
   Object.entries(walletPnl).forEach(([_,p]) => {
     totalCash += p.cash||0; totalValue += p.total_value||0;
     totalPnl += p.pnl||0; totalCapital += p.capital||INITIAL_CAPITAL;
     totalPositions += (p.total_value||0) - (p.cash||0);
+    totalRealized += p.realized||0;
+    totalUnrealized += p.unrealized||0;
   });
   const totalPnlPct = totalCapital>0 ? (totalPnl/totalCapital*100) : 0;
   document.getElementById('stotalCapital').textContent = '$' + totalCapital.toFixed(0);
   document.getElementById('scash').textContent = '$' + totalCash.toFixed(2);
   document.getElementById('sdeployed').textContent = '$' + (totalCapital-totalCash).toFixed(2) + ' (' + (totalCapital>0?((totalCapital-totalCash)/totalCapital*100).toFixed(1):0) + '%)';
   document.getElementById('stotalValue').textContent = '$' + totalValue.toFixed(2);
-  document.getElementById('sposValue').textContent = '$' + totalPositions.toFixed(2);
+  document.getElementById('sposValue').textContent = (totalRealized>=0?'+':'')+'$'+totalRealized.toFixed(2);
   const pe = document.getElementById('stotalpnl');
   pe.textContent = (totalPnl>=0?'+':'')+'$'+totalPnl.toFixed(2);
   pe.className = 'summary-value '+(totalPnl>=0?'green':'red');
@@ -471,11 +473,14 @@ function render(state) {
       const cls = p.pnl_pct > 0.5 ? 'win' : (p.pnl_pct < -0.5 ? 'loss' : 'neutral');
       const sign = p.pnl_pct>=0?'+':''; const pc = p.pnl_pct>=0?'green':'red';
       const rc = idx===0?'top1':(idx===1?'top2':(idx===2?'top3':''));
+      const realized = p.realized || 0;
+      const unrealized = p.unrealized || 0;
+      const realizedSign = realized>=0?'+':'';
       pnlHtml += `<div class="pnl-card ${cls}">
         <span class="pnl-rank ${rc}">${idx+1}</span>
         <div class="pnl-info">
           <div class="pnl-name">${name}</div>
-          <div class="pnl-cat">${CAT_NAMES[p.category]||p.category} | 现金$${p.cash?.toFixed(0)||'?'} | 持仓$${((p.total_value||0)-(p.cash||0)).toFixed(0)}</div>
+          <div class="pnl-cat">${CAT_NAMES[p.category]||p.category} | 现金$${p.cash?.toFixed(0)||'?'} | 已实现${realizedSign}$${realized.toFixed(2)} | 未实现$${unrealized.toFixed(2)}</div>
         </div>
         <div class="pnl-nums">
           <div class="pnl-value">$${p.total_value.toFixed(2)}</div>

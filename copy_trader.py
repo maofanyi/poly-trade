@@ -163,14 +163,23 @@ def sim_trade(w, trade, dry_run=False, skip_wait=False, cached_mid=None):
         fill_price = trade_data.get('avg_price', whale_price)
         fill_shares = trade_data.get('shares', 0)
         fill_slippage = trade_data.get('slippage', 0)
-        # Slippage vs whale: whale bought at X, we bought at Y
         whale_slippage = round(abs(fill_price - whale_price), 4)
         whale_slippage_pct = round(whale_slippage / whale_price * 100, 2) if whale_price > 0 else 0
+
+        # Track realized P&L (SELL only: compare to previous BUY cost basis)
+        realized_delta = 0.0
+        if side == 'SELL':
+            pos_key = slug[:40]
+            existing = base.get('_positions', {}).get(pos_key, {})
+            cost_basis = existing.get('cost', fill_price)
+            buy_shares = existing.get('shares', fill_shares)
+            realized_delta = round((fill_price - cost_basis) * min(fill_shares, buy_shares), 4)
 
         print(f"FILLED @ {fill_price} (whale={whale_price} slip={whale_slippage} {whale_slippage_pct}%)")
         return {**base, "status": "FILLED", "fill_price": fill_price,
                 "whale_slippage": whale_slippage, "whale_slippage_pct": whale_slippage_pct,
                 "shares": fill_shares, "pm_slippage": fill_slippage,
+                "realized_delta": realized_delta,
                 "post_balance": post_bal['total_value'], "pnl": post_bal['pnl'], "result": result}
     else:
         err = str(result.get('error','')) if result else 'no response'
@@ -186,20 +195,26 @@ def sim_trade(w, trade, dry_run=False, skip_wait=False, cached_mid=None):
         return {**base, "status": "FAILED", "reason": err[:50],
                 "post_balance": post_bal['total_value'], "pnl": post_bal['pnl']}
 
-def get_all_pnl():
-    """Query P&L for all wallet accounts."""
+def get_all_pnl(realized_tracker=None):
+    """Query P&L for all wallet accounts. Includes realized P&L from tracker."""
     pnl_data = {}
     for w in WALLETS:
         acct = f"copy-{w['name']}"
         bal = ensure_account(acct)
+        realized = realized_tracker.get(w['name'], 0.0) if realized_tracker else 0.0
+        total_val = round(bal['total_value'], 2)
+        cash_val = round(bal['cash'], 2)
+        unrealized = round(total_val - cash_val - realized, 2)
         pnl_data[w['name']] = {
             "wallet": w['name'],
             "category": w['cat'],
             "capital": INITIAL_CAPITAL,
-            "cash": round(bal['cash'], 2),
-            "total_value": round(bal['total_value'], 2),
+            "cash": cash_val,
+            "total_value": total_val,
             "pnl": round(bal['pnl'], 2),
-            "pnl_pct": round((bal['total_value'] - INITIAL_CAPITAL) / INITIAL_CAPITAL * 100, 2)
+            "pnl_pct": round((total_val - INITIAL_CAPITAL) / INITIAL_CAPITAL * 100, 2),
+            "realized": round(realized, 2),
+            "unrealized": unrealized,
         }
     return pnl_data
 
@@ -231,6 +246,7 @@ def main():
 
     total_new = 0
     scan_count = 0
+    realized_pnl = state.get('realized_pnl', {})  # per-wallet realized P&L
 
     SCAN_INTERVAL = interval
     while True:
@@ -301,6 +317,10 @@ def main():
                     sim = sim_trade(w, tr, dry_run=dry_run,
                                     skip_wait=(j > 0), cached_mid=last_mid)
                     if sim:
+                        # Accumulate realized P&L from SELL fills
+                        rd = sim.get('realized_delta', 0)
+                        if rd != 0:
+                            realized_pnl[w['name']] = realized_pnl.get(w['name'], 0.0) + rd
                         if sim.get('current_mid'): last_mid = sim['current_mid']
                         status = sim.get('status', '?')
                         if status == 'DRY_RUN':
@@ -336,7 +356,8 @@ def main():
 
         # Full P&L refresh every 3rd scan, or if new trades found
         if total_new > 0 or scan_count % 3 == 0:
-            state['wallet_pnl'] = get_all_pnl()
+            state['wallet_pnl'] = get_all_pnl(realized_pnl)
+            state['realized_pnl'] = dict(realized_pnl)
 
         state['last_scan'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         save_state(state)
@@ -409,7 +430,7 @@ if __name__ == '__main__':
             self.send_header('Access-Control-Allow-Headers','Content-Type')
             self.end_headers()
 
-    httpd = HTTPServer(('127.0.0.1', 8766), Handler)
+    httpd = HTTPServer(('0.0.0.0', 8766), Handler)
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
 
@@ -424,7 +445,8 @@ if __name__ == '__main__':
 
     state = {"seen_txns": [], "sim_trades": [], "wallet_pnl": {}, "last_scan": None,
              "monitor_start": datetime.fromtimestamp(copy_trader.MONITOR_START).strftime('%Y-%m-%d %H:%M:%S')}
-    state['wallet_pnl'] = get_all_pnl()
+    state['wallet_pnl'] = get_all_pnl(realized_pnl)
+    state['realized_pnl'] = dict(realized_pnl)
     state['last_scan'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     save_state(state)
 

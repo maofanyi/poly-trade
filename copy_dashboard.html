@@ -461,11 +461,17 @@ function render(state) {
   // Active wallet names (used by both P&L and trade cards)
   const activeNames = new Set(getActive().map(w => w.name));
 
+  // Pre-compute activity: wallet is active if it has P&L change OR sim_trades
+  const activeSet = new Set();
+  Object.entries(walletPnl).forEach(([name, p]) => {
+    if (Math.abs((p.total_value||500) - 500) > 0.05) activeSet.add(name);
+  });
+  simTrades.forEach(t => { if (t.wallet) activeSet.add(t.wallet); });
+
   // P&L Cards — only wallets with actual trade activity
-  const hasActivity = (p) => Math.abs((p.total_value||500) - 500) > 0.05;
   const sortedPnl = Object.entries(walletPnl)
     .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
-    .filter(([_,p]) => hasActivity(p))
+    .filter(([name]) => activeSet.has(name))
     .sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
   const inactiveCount = Object.entries(walletPnl).filter(([name]) => activeNames.size === 0 || activeNames.has(name)).length - sortedPnl.length;
   let pnlHtml = '';
@@ -506,9 +512,9 @@ function render(state) {
   const walletTrades = {};
   filtered.forEach(t => { const w = t.wallet||'?'; if(!walletTrades[w]) walletTrades[w]=[]; walletTrades[w].push(t); });
 
-  // Split wallets: active (has trades) vs inactive (no trades yet)
-  const activeW = allWallets.filter(w => walletPnl[w.name] && Math.abs((walletPnl[w.name].total_value||500)-500) > 0.05);
-  const inactiveW = allWallets.filter(w => !activeW.includes(w));
+  // Split wallets using same activeSet (consistent with P&L cards)
+  const activeW = allWallets.filter(w => activeSet.has(w.name));
+  const inactiveW = allWallets.filter(w => !activeSet.has(w.name));
 
   function renderTradeCard(w) {
     const wt = (walletTrades[w.name]||[]).slice(-8).reverse();

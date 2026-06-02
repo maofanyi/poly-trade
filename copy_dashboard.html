@@ -461,13 +461,16 @@ function render(state) {
   // Active wallet names (used by both P&L and trade cards)
   const activeNames = new Set(getActive().map(w => w.name));
 
-  // P&L Cards (only wallets in active list)
-  const sortedPnl = Object.entries(walletPnl)
-    .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
-    .sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
+  // P&L Cards — only wallets with actual trade activity
+  const activeWallets = Object.entries(walletPnl)
+    .filter(([name]) => activeNames.size === 0 || activeNames.has(name));
+  const hasTrades = (p) => Math.abs((p.total_value||500) - 500) > 0.05 || (filtered.some(t => t.wallet === p.wallet));
+  const activePnl = activeWallets.filter(([_,p]) => hasTrades(p));
+  const inactivePnl = activeWallets.filter(([_,p]) => !hasTrades(p));
+  const sortedPnl = activePnl.sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
   let pnlHtml = '';
-  if (sortedPnl.length === 0) {
-    pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无盈亏数据</div>';
+  if (activePnl.length === 0) {
+    pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无活跃钱包 (所有钱包尚无交易数据)</div>';
   } else {
     sortedPnl.forEach(([name,p],idx) => {
       const cls = p.pnl_pct > 0.5 ? 'win' : (p.pnl_pct < -0.5 ? 'loss' : 'neutral');
@@ -491,54 +494,69 @@ function render(state) {
   }
   document.getElementById('pnlGrid').innerHTML = pnlHtml;
 
-  // Trade cards — use activeNames from above
+  // Trade cards — split active vs inactive
   const active = getActive();
   const allWallets = active.map(w => ({
     name: w.name,
-    cat: walletPnl[w.name]?.category || w.cat || 'Unknown'
+    cat: walletPnl[w.name]?.category || w.cat || 'Unknown',
+    active: hasTrades(walletPnl[w.name] || {})
   }));
-  // Also include any server-only wallets not in local (won't happen after remove)
   Object.keys(walletPnl).forEach(name => {
     if (!activeNames.has(name)) {
-      allWallets.push({name, cat: walletPnl[name]?.category || 'Unknown'});
+      const p = walletPnl[name] || {};
+      allWallets.push({name, cat: p.category || 'Unknown', active: hasTrades(p)});
     }
   });
+  const activeW = allWallets.filter(w => w.active);
+  const inactiveW = allWallets.filter(w => !w.active);
+
   const walletTrades = {};
   filtered.forEach(t => { const w = t.wallet||'?'; if(!walletTrades[w]) walletTrades[w]=[]; walletTrades[w].push(t); });
-  let tradeHtml = '';
-  allWallets.forEach(w => {
-    const wt = (walletTrades[w.name]||[]).slice(-8).reverse();
-    const np = walletPnl[w.name];
-    const metaStr = np ? `市值$${np.total_value?.toFixed(0)||'?'} ${np.pnl_pct>=0?'+':''}${np.pnl_pct?.toFixed(1)||'?'}%` : '';
-    tradeHtml += `<div class="trade-card">
-      <div class="trade-card-header">
-        <span class="trade-card-name">${w.name} <span style="color:var(--muted);font-weight:400;font-size:10px;">${metaStr}</span></span>
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span class="cat-tag ${(w.cat||'Weather')[0].toLowerCase()}">${CAT_NAMES[w.cat]||w.cat}</span>
-          <button class="btn-xs remove" onclick="removeWalletMonitor('${w.name}')" title="停止跟单" style="font-size:9px;">✕</button>
-        </span>
-      </div>
-      <div class="trade-card-body">`;
-    if (wt.length===0) tradeHtml += `<div class="empty">等待新交易...<br><span style="font-size:9px;color:var(--muted)">监控自 ${state.monitor_start||'启动'}</span></div>`;
-    else wt.forEach(t => {
-      const st = t.status||''; let sl='',sc='status-hist';
-      if (st==='FILLED'){sl='已成交';sc='status-placed'}
-      else if (st==='LIMIT_PLACED'){sl='已挂单';sc='status-placed'}
-      else if (st==='SKIPPED'){sl='已跳过';sc='status-skipped'}
-      else if (st==='HISTORICAL'){sl='历史';sc='status-hist'}
-      else if (st==='FAILED'){sl='失败';sc='status-failed'}
-      tradeHtml += `<div class="trade-row">
-        <span class="trade-side side-${t.side||'?'}">${t.side==='BUY'?'买':'卖'}</span>
-        <span class="trade-qty">${(t.size||0).toFixed(0)}</span>
-        <span class="trade-market">${(t.slug||'').slice(0,35)}</span>
-        <span class="trade-usd">$${(t.sim_usd||0).toFixed(2)}</span>
-        <span class="trade-slip ${(t.whale_slippage||0)<0.01?"green":"red"}">${t.whale_slippage!=null?"$"+t.whale_slippage.toFixed(4):"—"}</span>
-        <span class="trade-status ${sc}">${sl}</span>
-      </div>`;
+
+  function renderTradeCards(wallets) {
+    let h = '';
+    wallets.forEach(w => {
+      const wt = (walletTrades[w.name]||[]).slice(-8).reverse();
+      const np = walletPnl[w.name];
+      const metaStr = np ? '市值$'+np.total_value?.toFixed(0)+' '+(np.pnl_pct>=0?'+':'')+np.pnl_pct?.toFixed(1)+'%' : '';
+      h += '<div class="trade-card">'
+        + '<div class="trade-card-header">'
+        + '<span class="trade-card-name">'+w.name+' <span style="color:var(--muted);font-weight:400;font-size:10px;">'+metaStr+'</span></span>'
+        + '<span style="display:flex;align-items:center;gap:8px;">'
+        + '<span class="cat-tag '+((w.cat||'Weather')[0].toLowerCase())+'">'+(CAT_NAMES[w.cat]||w.cat)+'</span>'
+        + '<button class="btn-xs remove" onclick="removeWalletMonitor(''+w.name+'')" title="停止跟单" style="font-size:9px;">✕</button>'
+        + '</span></div>'
+        + '<div class="trade-card-body">';
+      if (wt.length===0) h += '<div class="empty">等待新交易...<br><span style="font-size:9px;color:var(--muted)">监控自 '+(state.monitor_start||'启动')+'</span></div>';
+      else wt.forEach(t => {
+        const st = t.status||''; let sl='',sc='status-hist';
+        if (st==='FILLED'){sl='已成交';sc='status-placed'}
+        else if (st==='LIMIT_PLACED'){sl='已挂单';sc='status-placed'}
+        else if (st==='SKIPPED'){sl='已跳过';sc='status-skipped'}
+        else if (st==='HISTORICAL'){sl='历史';sc='status-hist'}
+        else if (st==='FAILED'){sl='失败';sc='status-failed'}
+        h += '<div class="trade-row">'
+          + '<span class="trade-side side-'+(t.side||'?')+'">'+(t.side==='BUY'?'买':'卖')+'</span>'
+          + '<span class="trade-qty">'+(t.size||0).toFixed(0)+'</span>'
+          + '<span class="trade-market">'+(t.slug||'').slice(0,35)+'</span>'
+          + '<span class="trade-usd">$'+(t.sim_usd||0).toFixed(2)+'</span>'
+          + '<span class="trade-slip '+((t.whale_slippage||0)<0.01?'green':'red')+'">'+(t.whale_slippage!=null?'$'+t.whale_slippage.toFixed(4):'—')+'</span>'
+          + '<span class="trade-status '+sc+'">'+sl+'</span>'
+          + '</div>';
+      });
+      h += '</div></div>';
     });
-    tradeHtml += '</div></div>';
-  });
+    return h;
+  }
+
+  let tradeHtml = renderTradeCards(activeW);
+  if (inactiveW.length > 0) {
+    tradeHtml += '<div class="section-title" onclick="var n=this.nextElementSibling;n.style.display=n.style.display==='none'?'':'none'" style="cursor:pointer;user-select:none;">'
+      + '📦 未激活钱包 ('+inactiveW.length+'个) — 点击展开/折叠</div>';
+    tradeHtml += '<div style="display:none;">'+renderTradeCards(inactiveW)+'</div>';
+  }
   document.getElementById('tradeGrid').innerHTML = tradeHtml || '<div class="empty">添加钱包后开始监控</div>';
+
 }
 
 function showToast(msg) {

@@ -124,7 +124,7 @@ def get_market_trades(slug: str, limit: int = 50):
             ts = int(datetime.fromisoformat(r['recorded_at']).timestamp())
         except Exception:
             continue
-        k = f'{ts}_{r[\"price\"]:.4f}'
+        p = r['price']; k = f'{ts}_{p:.4f}'
         if k in seen: continue
         seen.add(k)
         points.append({"t": ts, "p": round(r['price'], 4), "o": r['outcome']})
@@ -139,7 +139,7 @@ def get_market_trades(slug: str, limit: int = 50):
             ts = int(datetime.fromisoformat(t['timestamp']).timestamp())
         except Exception:
             continue
-        k = f'{ts}_{t[\"price\"]:.4f}'
+        k = f'{ts}_{t['price']:.4f}'
         if k in seen: continue
         seen.add(k)
         points.append({"t": ts, "p": round(float(t['price']), 4), "o": t['outcome'] or 'Yes'})
@@ -153,7 +153,7 @@ def get_market_trades(slug: str, limit: int = 50):
                 api_trades = _json.loads(resp.read())
             for t in (api_trades or []):
                 ts = int(t.get('timestamp', 0))
-                k = f'{ts}_{float(t.get(\"price\",0)):.4f}'
+                pp = float(t.get('price', 0)); k = f'{ts}_{pp:.4f}'
                 if k in seen: continue
                 seen.add(k)
                 points.append({"t": ts, "p": float(t.get('price', 0)), "o": t.get('outcome', '')})

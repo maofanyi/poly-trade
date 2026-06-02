@@ -145,7 +145,9 @@ h1{font-size:18px;margin-bottom:2px;color:var(--green);font-family:'JetBrains Mo
     <div class="summary-item"><span class="summary-label">可用现金</span><span class="summary-value" id="scash">—</span></div>
     <div class="summary-item"><span class="summary-label">已使用</span><span class="summary-value amber" id="sdeployed">—</span></div>
     <div class="summary-item"><span class="summary-label">总市值</span><span class="summary-value green" id="stotalValue">—</span></div>
-    <div class="summary-item"><span class="summary-label">总盈亏</span><span class="summary-value" id="stotalpnl">—</span></div>
+    <div class="summary-item"><span class="summary-label">累计盈亏</span><span class="summary-value" id="stotalpnl">—</span></div>
+	    <div class="summary-item"><span class="summary-label">持仓市值</span><span class="summary-value amber" id="sposValue">—</span></div>
+	    <div class="summary-item"><span class="summary-label">盈亏%</span><span class="summary-value" id="stotalpnlPct">—</span></div>
     <div class="summary-item"><span class="summary-label">最后扫描</span><span class="summary-value" id="slast" style="font-size:12px;">—</span></div>
   </div>
 
@@ -417,18 +419,24 @@ function render(state) {
   const filtered = filterTime(actionable);
 
   // Summary
-  let totalCash=0, totalValue=0, totalPnl=0, totalCapital=0;
+  let totalCash=0, totalValue=0, totalPnl=0, totalCapital=0, totalPositions=0;
   Object.entries(walletPnl).forEach(([_,p]) => {
     totalCash += p.cash||0; totalValue += p.total_value||0;
     totalPnl += p.pnl||0; totalCapital += p.capital||INITIAL_CAPITAL;
+    totalPositions += (p.total_value||0) - (p.cash||0);
   });
+  const totalPnlPct = totalCapital>0 ? (totalPnl/totalCapital*100) : 0;
   document.getElementById('stotalCapital').textContent = '$' + totalCapital.toFixed(0);
   document.getElementById('scash').textContent = '$' + totalCash.toFixed(2);
   document.getElementById('sdeployed').textContent = '$' + (totalCapital-totalCash).toFixed(2) + ' (' + (totalCapital>0?((totalCapital-totalCash)/totalCapital*100).toFixed(1):0) + '%)';
   document.getElementById('stotalValue').textContent = '$' + totalValue.toFixed(2);
+  document.getElementById('sposValue').textContent = '$' + totalPositions.toFixed(2);
   const pe = document.getElementById('stotalpnl');
   pe.textContent = (totalPnl>=0?'+':'')+'$'+totalPnl.toFixed(2);
   pe.className = 'summary-value '+(totalPnl>=0?'green':'red');
+  const pp = document.getElementById('stotalpnlPct');
+  pp.textContent = (totalPnlPct>=0?'+':'')+totalPnlPct.toFixed(2)+'%';
+  pp.className = 'summary-value '+(totalPnlPct>=0?'green':'red');
   document.getElementById('slast').textContent = state.last_scan || '首次扫描中...';
   document.getElementById('filterLabel').textContent =
     `(${filtered.length} 笔已成交${skipped.length > 0 ? ' | ' + skipped.length + ' 笔跳过/失败' : ''})`;

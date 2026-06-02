@@ -126,6 +126,7 @@ h1{font-size:18px;margin-bottom:2px;color:var(--green);font-family:'JetBrains Mo
 <div class="tabs">
   <button class="tab active" onclick="switchTab('monitor')">📊 监控面板</button>
   <button class="tab" onclick="switchTab('discover')">🔍 钱包发现</button>
+  <button class="tab" onclick="switchTab('polydata')">📦 PolyData Top20</button>
 </div>
 
 <!-- ===== TAB 1: MONITOR ===== -->
@@ -172,6 +173,23 @@ h1{font-size:18px;margin-bottom:2px;color:var(--green);font-family:'JetBrains Mo
         <tr><th>状态</th><th>钱包</th><th>地址</th><th>类别</th><th>胜率</th><th>盈利</th><th>操作</th></tr>
       </thead>
       <tbody id="discoverBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== TAB 3: POLYDATA ===== -->
+<div class="tab-content" id="tab-polydata">
+  <div class="filter-bar" style="margin-bottom:10px;">
+    <span style="font-size:12px;color:var(--muted);">基于 8600 万笔历史交易 · 跟单适配度排名 · 点击添加</span>
+  </div>
+  <div class="wallet-table-wrap">
+    <table class="wallet-table">
+      <thead>
+        <tr><th>排名</th><th>钱包</th><th>地址</th><th>交易数</th><th>交易量</th><th>市场数</th><th>评分</th><th>操作</th></tr>
+      </thead>
+      <tbody id="polydataBody">
+        <tr><td colspan="8"><div class="empty">数据收集中... 运行 poly_analyzer.py --top 20 生成排名</div></td></tr>
+      </tbody>
     </table>
   </div>
 </div>
@@ -329,6 +347,37 @@ function switchTab(name) {
   document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'discover') renderDiscoverTable();
+  if (name === 'polydata') renderPolyDataTab();
+}
+
+async function renderPolyDataTab() {
+  try {
+    const resp = await fetch('poly_data/processed/wallets_top20.json?t=' + Date.now());
+    if (!resp.ok) throw new Error('not found');
+    const data = await resp.json();
+    const active = getActive();
+    const activeAddrs = new Set(active.map(w => w.addr));
+
+    document.getElementById('polydataBody').innerHTML = data.map((w, i) => {
+      const monitoring = activeAddrs.has(w.addr);
+      const actionBtn = monitoring
+        ? '<button class="btn-xs remove" onclick="removeWallet(\'' + w.addr + '\')">移除</button>'
+        : '<button class="btn-xs" onclick="addWallet(\'' + w.addr + '\',\'' + w.name + '\',\'' + (w.cat||'PolyData') + '\')">+ 添加跟单</button>';
+      return `<tr>
+        <td style="font-weight:900;color:var(--amber);">#${i+1}</td>
+        <td class="name-cell">${w.name}</td>
+        <td class="addr" title="${w.addr}">${w.addr.slice(0,6)}...${w.addr.slice(-4)}</td>
+        <td>${w.total_trades||'?'}</td>
+        <td style="color:var(--green);">$${(w.total_volume||0).toLocaleString()}</td>
+        <td>${w.markets_traded||'?'}</td>
+        <td style="font-weight:700;">${w.copy_score||'?'}</td>
+        <td>${actionBtn}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('polydataBody').innerHTML =
+      '<tr><td colspan="8"><div class="empty">Top20 数据尚未生成<br><code style="font-size:10px;">cd poly_data && uv run python update.py && cd .. && python poly_analyzer.py --top 20</code></div></td></tr>';
+  }
 }
 
 // ===== TIME FILTER =====

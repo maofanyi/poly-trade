@@ -15,6 +15,7 @@ POLY_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poly_d
 TRADES_CSV = os.path.join(POLY_DATA_DIR, "processed", "trades.csv")
 MARKETS_CSV = os.path.join(POLY_DATA_DIR, "data", "markets.csv")
 WALLETS_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wallets_active.json")
+TOPLIST_OUT = os.path.join(POLY_DATA_DIR, "processed", "wallets_top20.json")
 
 def analyze_trades(trades_csv):
     """Parse trades.csv and compute per-wallet metrics."""
@@ -123,7 +124,26 @@ def export_top(wallets, top_n=20):
 
     with open(WALLETS_OUT, 'w') as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
+
+    # Also export detailed list for dashboard tab
+    top_list = []
+    for addr, data in list(wallets.items())[:top_n]:
+        top_list.append({
+            "addr": addr,
+            "name": f"Poly{len(top_list)+1:02d}",
+            "cat": "PolyData",
+            "total_trades": data['total_trades'],
+            "total_volume": data['total_volume'],
+            "markets_traded": data['markets_traded'],
+            "copy_score": data['copy_score'],
+            "note": f"T={data['total_trades']} V=${data['total_volume']:.0f}"
+        })
+    os.makedirs(os.path.dirname(TOPLIST_OUT), exist_ok=True)
+    with open(TOPLIST_OUT, 'w') as f:
+        json.dump(top_list, f, indent=2, ensure_ascii=False)
+
     print(f"\nExported top {top_n} wallets to {WALLETS_OUT}")
+    print(f"Dashboard list saved to {TOPLIST_OUT}")
     for w in config[:10]:
         print(f"  {w['name']}: {w['addr'][:10]}... {w['note']}")
     return config

@@ -208,6 +208,22 @@ def get_wallet_positions(wallet_id: int):
                        "active":live_price is not None})
     return result
 
+@router.post("/cleanup-positions")
+def cleanup_stale_positions():
+    """Reset all copy-trading accounts to clear stale/expired positions, then re-init."""
+    from trader import pm, INITIAL_CAPITAL
+    db = get_db()
+    wallets = db.execute("SELECT name FROM wallets WHERE active = 1").fetchall()
+    cleaned = 0
+    for w in wallets:
+        acct = f"copy-{w['name']}"
+        r = pm(f"pm-trader --account {acct} reset --confirm")
+        if r and r.get('ok'):
+            pm(f"pm-trader --account {acct} init --balance {INITIAL_CAPITAL}")
+            cleaned += 1
+            print(f"  Reset: {acct} -> ${INITIAL_CAPITAL}")
+    return {"ok": True, "cleaned": cleaned, "message": f"Reset {cleaned} accounts to ${INITIAL_CAPITAL}"}
+
 from scores import get_wallet_scores, refresh_all_scores
 
 @router.get("/scores")

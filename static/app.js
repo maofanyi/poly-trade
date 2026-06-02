@@ -151,6 +151,16 @@ const app = createApp({
       } catch (e) {}
     }
 
+    async function cleanupPositions() {
+      if (!confirm('清理所有钱包的过期持仓？\n这将重置每个账户为 $500 初始资金。')) return;
+      try {
+        const r = await fetch('/api/wallets/cleanup-positions', { method: 'POST' });
+        const data = await r.json();
+        alert(data.message || '已清理');
+        await loadState();
+      } catch(e) { alert('清理失败'); }
+    }
+
     async function resetDefaults() {
       if (!confirm('确定重置为默认钱包列表？自定义添加的钱包将被移除。')) return;
       try {
@@ -164,7 +174,7 @@ const app = createApp({
     function catLabel(c) { const m={Weather:'天气',Politics:'政治',Sports:'体育',Tech:'科技',Culture:'文化'}; return m[c]||c||'—'; }
     function showDetail(trade, cat){ detailTrade.value = trade; detailWalletCat.value = cat||''; }
 
-    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, walletScores, portfolioData, catLabel, addWallet, removeWallet, resetDefaults, detailTrade, detailWalletCat, showDetail };
+    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, walletScores, portfolioData, catLabel, addWallet, removeWallet, cleanupPositions, resetDefaults, detailTrade, detailWalletCat, showDetail };
   }
 });
 

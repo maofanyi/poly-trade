@@ -24,6 +24,9 @@ def get_summary():
         if pnl:
             total_cash += pnl["cash"] or 0
             total_value += pnl["total_value"] or 0
+        else:
+            total_cash += INITIAL_CAPITAL
+            total_value += INITIAL_CAPITAL
 
     total_pnl = round(total_value - total_capital, 2)
     total_pnl_pct = round(total_pnl / total_capital * 100, 2) if total_capital > 0 else 0.0

@@ -21,18 +21,27 @@ def get_state():
             "SELECT * FROM pnl_snapshots WHERE wallet_id=? ORDER BY id DESC LIMIT 1",
             (w["id"],)
         ).fetchone()
-        wallet_list.append({
-            "id": w["id"], "address": w["address"], "name": w["name"],
-            "category": w["category"], "active": bool(w["active"]),
-            "created_at": w["created_at"],
-            "cash": pnl["cash"] if pnl else None,
-            "total_value": pnl["total_value"] if pnl else None,
-            "pnl": pnl["pnl"] if pnl else None,
-            "pnl_pct": pnl["pnl_pct"] if pnl else None,
-        })
         if pnl:
+            wallet_list.append({
+                "id": w["id"], "address": w["address"], "name": w["name"],
+                "category": w["category"], "active": bool(w["active"]),
+                "created_at": w["created_at"],
+                "cash": pnl["cash"], "total_value": pnl["total_value"],
+                "pnl": pnl["pnl"], "pnl_pct": pnl["pnl_pct"],
+            })
             total_cash += pnl["cash"] or 0
             total_value += pnl["total_value"] or 0
+        else:
+            # Wallet hasn't traded yet — use initial capital
+            wallet_list.append({
+                "id": w["id"], "address": w["address"], "name": w["name"],
+                "category": w["category"], "active": bool(w["active"]),
+                "created_at": w["created_at"],
+                "cash": INITIAL_CAPITAL, "total_value": INITIAL_CAPITAL,
+                "pnl": 0.0, "pnl_pct": 0.0,
+            })
+            total_cash += INITIAL_CAPITAL
+            total_value += INITIAL_CAPITAL
 
     wallet_count = len(wallet_list)
     total_capital = INITIAL_CAPITAL * wallet_count

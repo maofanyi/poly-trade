@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from database import get_db
 from models import WalletCreate
 from trader import ensure_account
+from config import INITIAL_CAPITAL
 
 router = APIRouter(prefix="/api/wallets", tags=["wallets"])
 
@@ -11,10 +12,10 @@ def _row_to_out(row, pnl_row=None) -> dict:
         "id": row["id"], "address": row["address"], "name": row["name"],
         "category": row["category"], "active": bool(row["active"]),
         "created_at": row["created_at"],
-        "cash": pnl_row["cash"] if pnl_row else None,
-        "total_value": pnl_row["total_value"] if pnl_row else None,
-        "pnl": pnl_row["pnl"] if pnl_row else None,
-        "pnl_pct": pnl_row["pnl_pct"] if pnl_row else None,
+        "cash": pnl_row["cash"] if pnl_row else INITIAL_CAPITAL,
+        "total_value": pnl_row["total_value"] if pnl_row else INITIAL_CAPITAL,
+        "pnl": pnl_row["pnl"] if pnl_row else 0.0,
+        "pnl_pct": pnl_row["pnl_pct"] if pnl_row else 0.0,
     }
 
 @router.get("")

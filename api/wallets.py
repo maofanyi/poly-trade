@@ -72,3 +72,65 @@ def get_wallet_pnl_history(wallet_id: int, days: int = 7):
         ORDER BY timestamp ASC
     """, (wallet_id, f'-{days} days')).fetchall()
     return [dict(r) for r in rows]
+
+@router.post("/validate")
+def validate_wallet(data: dict):
+    """Validate a Polymarket wallet address — check if it has trading history."""
+    import urllib.request, json
+    addr = (data.get("address") or "").strip()
+    if not addr or len(addr) < 10:
+        raise HTTPException(status_code=400, detail="Invalid address format")
+
+    # Check if already in DB
+    db = get_db()
+    existing = db.execute("SELECT * FROM wallets WHERE address = ?", (addr,)).fetchone()
+    if existing:
+        return {
+            "valid": True,
+            "address": addr,
+            "name": existing["name"],
+            "category": existing["category"],
+            "trades_found": None,
+            "already_added": True
+        }
+
+    # Query Polymarket Data API
+    try:
+        url = f"https://data-api.polymarket.com/trades?user={addr}&limit=5"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            trades = json.loads(resp.read().decode())
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Data API error: {e}")
+
+    if not trades or len(trades) == 0:
+        return {"valid": False, "address": addr, "message": "No trades found for this address"}
+
+    # Extract info from trades
+    categories = set()
+    for t in trades:
+        title = (t.get("title") or "").lower()
+        if any(w in title for w in ["weather","temperature","rain","snow","wind","storm","hurricane"]):
+            categories.add("Weather")
+        elif any(w in title for w in ["election","trump","biden","senate","congress","president","political"]):
+            categories.add("Politics")
+        elif any(w in title for w in ["nba","nfl","mlb","ufc","soccer","football","tennis","sports"]):
+            categories.add("Sports")
+        elif any(w in title for w in ["ai","tech","apple","google","bitcoin","crypto"]):
+            categories.add("Tech")
+        else:
+            categories.add("General")
+
+    cat = list(categories)[0] if categories else "General"
+
+    # Auto-generate name from address
+    short_name = f"Wallet-{addr[:6]}"
+
+    return {
+        "valid": True,
+        "address": addr,
+        "name": short_name,
+        "category": cat,
+        "trades_found": len(trades),
+        "already_added": False
+    }

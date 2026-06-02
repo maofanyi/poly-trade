@@ -43,7 +43,7 @@ def get_state():
                 "pnl": None, "pnl_pct": None,
             })
 
-    wallet_count = len(wallet_list)
+    wallet_count = len(traded_list)
     total_capital = INITIAL_CAPITAL * wallet_count
     total_pnl = round(total_value - total_capital, 2)
     total_pnl_pct = round(total_pnl / total_capital * 100, 2) if total_capital > 0 else 0.0

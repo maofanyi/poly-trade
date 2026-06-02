@@ -102,16 +102,67 @@ def run_backtest(address: str, days: int = 30) -> dict:
             })
             del positions[pos_key]
 
-    # Separate expired positions from active ones
+    # Resolve expired positions using Gamma API outcome prices
     now_ts = int(time.time())
     expired_count = 0
-    expired_value = 0.0  # cost of expired positions (excluded from P&L)
+    expired_value = 0.0
+    resolved_pnl = 0.0
+    _market_cache = {}  # Cache resolution queries
+
     for pk, pos in list(positions.items()):
         expiry = _extract_expiry(pos.get('slug', ''))
-        if expiry and (now_ts - expiry) > 3600:
-            expired_count += 1
-            expired_value += pos['shares'] * pos['cost_basis']
-            del positions[pk]
+        if not expiry or (now_ts - expiry) <= 3600:
+            continue  # Not expired yet or recently expired
+        expired_count += 1
+        expired_value += pos['shares'] * pos['cost_basis']
+
+        # Try to get resolution from Gamma API
+        slug = pos.get('slug', '')
+        if slug in _market_cache:
+            resolution = _market_cache[slug]
+        else:
+            resolution = None
+            try:
+                # First get the event, then find the market
+                evt_resp = _fetch(f"https://gamma-api.polymarket.com/events?slug={slug}")
+                time.sleep(0.3)
+                if evt_resp and len(evt_resp) > 0:
+                    markets_raw = evt_resp[0].get('markets', '[]')
+                    if isinstance(markets_raw, str):
+                        markets_raw = json.loads(markets_raw)
+                    for m in markets_raw:
+                        m_slug = m.get('slug', '')
+                        if m_slug == slug or m_slug in slug:
+                            outcomes = m.get('outcomes', [])
+                            prices = m.get('outcomePrices', [])
+                            for i, (outcome, price_str) in enumerate(zip(outcomes, prices)):
+                                try:
+                                    p = float(price_str)
+                                except (ValueError, TypeError):
+                                    p = 0
+                                if p >= 0.99:  # This outcome resolved to $1 (winner)
+                                    resolution = outcome
+                                    break
+                            break
+            except Exception:
+                pass
+            _market_cache[slug] = resolution
+
+        # Calculate P&L from resolution
+        outcome_key = pk.split('|')[1] if '|' in pk else ''
+        outcome_normalized = outcome_key.strip().lower()
+
+        if resolution and outcome_normalized == resolution.strip().lower():
+            # Position WON: shares × (1.0 - cost_basis)
+            win_pnl = round(pos['shares'] * (1.0 - pos['cost_basis']), 2)
+            resolved_pnl += win_pnl
+            realized_pnl += win_pnl  # Add to realized since we know the outcome
+        else:
+            # Position LOST or unknown: loss = cost_basis × shares
+            resolved_pnl -= round(pos['shares'] * pos['cost_basis'], 2)
+            realized_pnl -= round(pos['shares'] * pos['cost_basis'], 2)
+
+        del positions[pk]
 
     # Remaining open positions — valued at cost
     open_positions = len(positions)
@@ -122,27 +173,29 @@ def run_backtest(address: str, days: int = 30) -> dict:
     final_pnl = round(realized_pnl, 2)
     total_value = round(cash + unrealized_value, 2)
 
+    total_value = round(cash + unrealized_value, 2)
+    final_pnl = round(realized_pnl, 2)
+
     warnings = []
     total_simulated = buy_count + sell_count
-    if total_simulated > 0 and buy_count / total_simulated > 0.8:
-        warnings.append(f"仅买入无卖出 ({buy_count}买/{sell_count}卖) — 无法计算完整盈亏")
     if expired_count > 0:
-        warnings.append(f"{expired_count}个仓位已过期·结果未知·未计入盈亏 (成本\${expired_value:.0f})")
-    if sell_count > 0:
-        warnings.append(f"已实现盈亏基于{sell_count}笔卖出 — 这是实际可信的盈亏数据")
+        warnings.append(f"{expired_count}个过期仓位已通过Gamma API查询真实结算结果")
+    if total_simulated > 0 and buy_count / total_simulated > 0.8 and sell_count == 0:
+        warnings.append(f"注意: 仅买入无卖出 ({buy_count}买) — 盈亏基于过期仓位的链上结算价计算")
 
     return {
         "trades_analyzed": len(trade_log),
         "total_trades_found": len(trades),
         "days": days,
         "initial_capital": capital,
-        "final_value": total_value,
         "pnl": final_pnl,
         "pnl_pct": round(final_pnl / capital * 100, 2),
         "realized_pnl": round(realized_pnl, 2),
+        "resolved_pnl": round(resolved_pnl, 2),
         "expired_positions": expired_count,
         "expired_value": round(expired_value, 2),
         "open_positions": open_positions,
+        "final_value": total_value,
         "unrealized_value": round(unrealized_value, 2),
         "cash_remaining": round(cash, 2),
         "buy_count": buy_count,

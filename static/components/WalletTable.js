@@ -30,13 +30,36 @@ export default {
       <wallet-row v-for="w in enriched" :key="w.addr" :wallet="w" :monitoring="activeNames.has(w.name)" @add="addWallet" @remove="removeWallet" />
       <tr v-if="enriched.length===0"><td colspan="7"><div class="empty">无匹配结果</div></td></tr>
     </tbody></table></div>
+    <!-- Discovered wallets -->
+    <div v-if="discovered.length > 0" style="margin-top:16px;">
+      <div class="section-title" style="margin-bottom:8px;">🔍 自动发现 ({{ discovered.length }})</div>
+      <div class="table-wrap"><table><thead><tr><th>评分</th><th>钱包</th><th>地址</th><th>类别</th><th>交易数</th><th>交易量</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr v-for="d in discovered" :key="d.address" style="font-size:12px;">
+          <td><span :style="{color:d.score>=50?'var(--green)':d.score>=30?'var(--amber)':'var(--muted)',fontWeight:'700'}">{{ d.score?.toFixed(0) }}</span></td>
+          <td style="font-weight:600;">{{ d.name || '?' }}</td>
+          <td class="addr" :title="d.address">{{ (d.address||'').slice(0,6) }}...{{ (d.address||'').slice(-4) }}</td>
+          <td><span class="cat-tag" :class="(d.category||'W')[0].toLowerCase()">{{ catName(d.category) }}</span></td>
+          <td>{{ d.trades || 0 }}</td>
+          <td class="green">{{ fmtVol(d.volume) }}</td>
+          <td>
+            <button v-if="!activeNames.has(d.name)" class="btn" @click="$emit('add',d.address,d.name,d.category)">+ 添加跟单</button>
+            <button v-else class="btn muted" disabled>已监控</button>
+          </td>
+        </tr>
+      </tbody></table></div>
+    </div>
   </div>`,
   props: { candidates:{ type:Array, default:()=>[] }, activeNames:{ type:Set, default:()=>new Set() }, scores:{ type:Array, default:()=>[] } },
   emits: ['add','remove','validate'],
   data(){ return {
     search:'', catFilter:'all', categories:['all','Weather','Politics','Sports','Tech','Culture'],
-    addrInput:'', validating:false, validResult:null
+    addrInput:'', validating:false, validResult:null,
+    discovered: []
   }; },
+  async mounted(){
+    try { const r=await fetch('/api/wallets/discovered'); if(r.ok) this.discovered=await r.json(); } catch(e){}
+  },
   computed: {
     scoreMap(){
       const m={};
@@ -66,7 +89,8 @@ export default {
     }
   },
   methods: {
-    catName(c){ const m={Weather:'天气',Politics:'政治',Sports:'体育',Tech:'科技',Culture:'文化'}; return m[c]||c; },
+    catName(c){ const m={Weather:'天气',Politics:'政治',Sports:'体育',Tech:'科技',Culture:'文化'}; return m[c]||c||'—'; },
+    fmtVol(v){ if(!v) return '—'; return v>=1e6?'$'+(v/1e6).toFixed(1)+'M':v>=1000?'$'+(v/1000).toFixed(0)+'K':'$'+v.toFixed(0); },
     addWallet(addr,name,cat){ this.$emit('add',addr,name,cat); },
     removeWallet(name){ this.$emit('remove',name); },
     async validateAddr(){

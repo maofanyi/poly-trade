@@ -69,6 +69,127 @@ def refresh_all_scores():
     return updated
 
 
+def discover_wallets(max_discover: int = 10) -> list[dict]:
+    """Discover new high-performing wallets from active markets.
+
+    1. Get active market slugs from monitored wallets' recent trades
+    2. For each market, find other traders
+    3. Score new traders, return top candidates
+    """
+    db = get_db()
+
+    # Collect known addresses (monitored + already discovered)
+    known = set()
+    for row in db.execute("SELECT address FROM wallets").fetchall():
+        known.add(row['address'].lower())
+    for row in db.execute("SELECT address FROM discovered_wallets").fetchall():
+        known.add(row['address'].lower())
+
+    # Get active market slugs from monitored wallets' recent trades
+    market_slugs = set()
+    active_wallets = db.execute("SELECT address FROM wallets WHERE active = 1").fetchall()
+    for w in active_wallets:
+        try:
+            trades = _fetch(f"{DATA_API}/trades?user={w['address']}&limit=10")
+            time.sleep(0.2)
+            for t in (trades or [])[:3]:
+                slug = t.get('slug', '')
+                if slug:
+                    market_slugs.add(slug)
+        except Exception:
+            continue
+
+    if not market_slugs:
+        print("  No active markets found for discovery")
+        return []
+
+    print(f"  Scanning {len(market_slugs)} markets for new traders...")
+
+    # For each market, find other traders
+    candidates = {}  # address -> {trade_count, total_vol}
+    for slug in list(market_slugs)[:8]:  # Limit to 8 markets
+        try:
+            market_trades = _fetch(f"{DATA_API}/trades?market={slug}&limit=30")
+            time.sleep(0.3)
+            for t in (market_trades or []):
+                addr = (t.get('user') or t.get('maker') or '').lower()
+                if not addr or addr in known:
+                    continue
+                if addr not in candidates:
+                    candidates[addr] = {'trades': 0, 'volume': 0.0}
+                candidates[addr]['trades'] += 1
+                candidates[addr]['volume'] += float(t.get('size', 0)) * float(t.get('price', 0.5))
+        except Exception as e:
+            continue
+
+    if not candidates:
+        print("  No new traders discovered")
+        return []
+
+    # Filter: require at least 3 trades in our sample
+    candidates = {a: c for a, c in candidates.items() if c['trades'] >= 3}
+    print(f"  Found {len(candidates)} potential new wallets (≥3 trades)")
+
+    # Score top candidates
+    scored = []
+    for addr in list(candidates.keys())[:30]:  # Score at most 30
+        result = score_wallet(addr)
+        if result and result['score'] > 30:
+            # Try to determine category from trade titles
+            cat = "General"
+            try:
+                sample = _fetch(f"{DATA_API}/trades?user={addr}&limit=3")
+                titles = ' '.join(t.get('title', '') for t in (sample or [])).lower()
+                if any(w in titles for w in ['temperature', 'weather', 'rain', 'snow', 'storm']):
+                    cat = 'Weather'
+                elif any(w in titles for w in ['election', 'trump', 'senate', 'president', 'political']):
+                    cat = 'Politics'
+                elif any(w in titles for w in ['nba', 'nfl', 'mlb', 'ufc', 'soccer', 'tennis']):
+                    cat = 'Sports'
+                time.sleep(0.2)
+            except Exception:
+                pass
+
+            # Generate name
+            short_name = f"发现-{addr[:6]}"
+
+            scored.append({
+                'address': addr,
+                'name': short_name,
+                'category': cat,
+                'trades': result['trades'],
+                'volume': result['volume'],
+                'markets': result['markets'],
+                'score': result['score'],
+            })
+            print(f"    {short_name}: score={result['score']:.0f} {result['trades']}trades")
+
+    # Sort by score desc, take top N
+    scored.sort(key=lambda x: x['score'], reverse=True)
+    top = scored[:max_discover]
+
+    # Save to discovered_wallets table
+    for w in top:
+        db.execute("""
+            INSERT OR REPLACE INTO discovered_wallets (address, name, category, trades, volume, markets, score, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+        """, (w['address'], w['name'], w['category'], w['trades'], w['volume'], w['markets'], w['score']))
+    db.commit()
+
+    print(f"  Discovered {len(top)} new wallets")
+    return top
+
+
+def get_discovered_wallets() -> list[dict]:
+    """Get all discovered wallets, sorted by score desc."""
+    db = get_db()
+    rows = db.execute("""
+        SELECT * FROM discovered_wallets
+        ORDER BY score DESC
+    """).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_wallet_scores() -> list[dict]:
     """Get all wallet scores with names, sorted by score desc."""
     db = get_db()

@@ -102,5 +102,16 @@ def init_db():
             score REAL DEFAULT 0,
             updated_at TEXT DEFAULT (datetime('now','localtime'))
         );
+
+        CREATE TABLE IF NOT EXISTS discovered_wallets (
+            address TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT DEFAULT 'General',
+            trades INTEGER DEFAULT 0,
+            volume REAL DEFAULT 0,
+            markets INTEGER DEFAULT 0,
+            score REAL DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+        );
     """)
     db.commit()

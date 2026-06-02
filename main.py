@@ -41,15 +41,22 @@ async def lifespan(app: FastAPI):
         scanner_thread = threading.Thread(target=scan_loop, daemon=True)
         scanner_thread.start()
 
-    # Start wallet score refresher (runs every 30 min)
+    # Start wallet score refresher (runs every 30 min) + discovery (every 2 hours)
     def score_refresh_loop():
         import time as _time
-        from scores import refresh_all_scores
-        _time.sleep(30)  # Initial delay for server to stabilize
+        from scores import refresh_all_scores, discover_wallets
+        _time.sleep(30)
+        discover_counter = 0
         while True:
             try:
                 print("Refreshing wallet scores...")
                 refresh_all_scores()
+                discover_counter += 1
+                # Run discovery every 4th cycle (~2 hours)
+                if discover_counter >= 4:
+                    print("Running wallet discovery scan...")
+                    discover_wallets()
+                    discover_counter = 0
             except Exception as e:
                 print(f"Score refresh error: {e}")
             _time.sleep(1800)

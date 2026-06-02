@@ -147,3 +147,16 @@ def refresh_scores():
     """Force-refresh all wallet scores from Polymarket Data API."""
     updated = refresh_all_scores()
     return {"ok": True, "updated": updated}
+
+from scores import discover_wallets, get_discovered_wallets
+
+@router.get("/discovered")
+def list_discovered():
+    """Get auto-discovered high-performing wallets."""
+    return get_discovered_wallets()
+
+@router.post("/discovered/scan")
+def scan_discovered():
+    """Run wallet discovery scan now."""
+    found = discover_wallets()
+    return {"ok": True, "found": len(found), "wallets": found}

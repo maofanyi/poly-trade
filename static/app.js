@@ -77,7 +77,11 @@ const app = createApp({
       return result;
     });
 
-    const sortedPnl = computed(() => [...wallets.value].sort((a, b) => (b.pnl_pct || 0) - (a.pnl_pct || 0)));
+    const sortedPnl = computed(() =>
+      [...wallets.value]
+        .filter(w => w.pnl_pct != null)   // only wallets with trading activity
+        .sort((a, b) => (b.pnl_pct || 0) - (a.pnl_pct || 0))
+    );
 
     async function addWallet(addr, name, cat) {
       try {

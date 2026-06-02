@@ -13,6 +13,7 @@ def get_state():
 
     wallets = db.execute("SELECT * FROM wallets WHERE active = 1 ORDER BY name").fetchall()
     wallet_list = []
+    traded_list = []
     total_cash = 0.0
     total_value = 0.0
 
@@ -31,17 +32,16 @@ def get_state():
             })
             total_cash += pnl["cash"] or 0
             total_value += pnl["total_value"] or 0
+            traded_list.append(w["name"])
         else:
-            # Wallet hasn't traded yet — use initial capital
+            # Wallet hasn't traded yet — return with null P&L, frontend filters it
             wallet_list.append({
                 "id": w["id"], "address": w["address"], "name": w["name"],
                 "category": w["category"], "active": bool(w["active"]),
                 "created_at": w["created_at"],
-                "cash": INITIAL_CAPITAL, "total_value": INITIAL_CAPITAL,
-                "pnl": 0.0, "pnl_pct": 0.0,
+                "cash": None, "total_value": None,
+                "pnl": None, "pnl_pct": None,
             })
-            total_cash += INITIAL_CAPITAL
-            total_value += INITIAL_CAPITAL
 
     wallet_count = len(wallet_list)
     total_capital = INITIAL_CAPITAL * wallet_count

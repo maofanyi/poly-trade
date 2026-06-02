@@ -399,8 +399,10 @@ function render(state) {
     }
   } else { document.getElementById('filterRange').textContent = ''; }
 
-  // P&L Cards
-  const sortedPnl = Object.entries(walletPnl).sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
+  // P&L Cards (only wallets in active list)
+  const sortedPnl = Object.entries(walletPnl)
+    .filter(([name]) => activeNames.has(name))
+    .sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
   let pnlHtml = '';
   if (sortedPnl.length === 0) {
     pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无盈亏数据</div>';
@@ -424,17 +426,19 @@ function render(state) {
   }
   document.getElementById('pnlGrid').innerHTML = pnlHtml;
 
-  // Trade cards - merge server data (wallet_pnl) with local config
+  // Trade cards — driven by LOCAL active list, augmented by server PnL data
   const active = getActive();
-  const serverWallets = Object.keys(walletPnl);
-  // Build unified wallet list: server data takes priority, fill missing cats from local
-  const allWallets = serverWallets.length > 0
-    ? serverWallets.map(name => {
-        const local = active.find(w => w.name === name);
-        const cat = walletPnl[name]?.category || local?.cat || 'Crypto';
-        return {name, cat};
-      })
-    : active;  // fallback to local if server returns nothing
+  const activeNames = new Set(active.map(w => w.name));
+  const allWallets = active.map(w => ({
+    name: w.name,
+    cat: walletPnl[w.name]?.category || w.cat || 'Unknown'
+  }));
+  // Also include any server-only wallets not in local (won't happen after remove)
+  Object.keys(walletPnl).forEach(name => {
+    if (!activeNames.has(name)) {
+      allWallets.push({name, cat: walletPnl[name]?.category || 'Unknown'});
+    }
+  });
   const walletTrades = {};
   filtered.forEach(t => { const w = t.wallet||'?'; if(!walletTrades[w]) walletTrades[w]=[]; walletTrades[w].push(t); });
   let tradeHtml = '';

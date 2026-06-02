@@ -401,7 +401,7 @@ function render(state) {
 
   // P&L Cards (only wallets in active list)
   const sortedPnl = Object.entries(walletPnl)
-    .filter(([name]) => activeNames.has(name))
+    .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
     .sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
   let pnlHtml = '';
   if (sortedPnl.length === 0) {

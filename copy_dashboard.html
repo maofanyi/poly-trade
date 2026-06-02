@@ -504,22 +504,13 @@ function render(state) {
   }
   document.getElementById('pnlGrid').innerHTML = pnlHtml;
 
-  // Trade cards — use activeNames from above
-  const active = getActive();
-  const allWallets = active.map(w => ({
-    name: w.name,
-    cat: walletPnl[w.name]?.category || w.cat || 'Unknown'
-  }));
-  // Also include any server-only wallets not in local (won't happen after remove)
-  Object.keys(walletPnl).forEach(name => {
-    if (!activeNames.has(name)) {
-      allWallets.push({name, cat: walletPnl[name]?.category || 'Unknown'});
-    }
-  });
+  // Trade cards — use same wallet list as P&L cards (activeNames + walletPnl)
+  const allWallets = Object.keys(walletPnl)
+    .filter(name => activeNames.size === 0 || activeNames.has(name))
+    .map(name => ({ name, cat: walletPnl[name]?.category || 'Unknown' }));
   const walletTrades = {};
   filtered.forEach(t => { const w = t.wallet||'?'; if(!walletTrades[w]) walletTrades[w]=[]; walletTrades[w].push(t); });
 
-  // Split wallets using activeWallets (same source as P&L)
   const activeW = allWallets.filter(w => activeWallets.has(w.name));
   const inactiveW = allWallets.filter(w => !activeWallets.has(w.name));
 

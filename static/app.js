@@ -10,6 +10,7 @@ import PnlTrendChart from './components/PnlTrendChart.js';
 import AlertConfigPanel from './components/AlertConfigPanel.js';
 import ToastContainer from './components/ToastContainer.js';
 import BacktestPanel from './components/BacktestPanel.js';
+import PortfolioPanel from './components/PortfolioPanel.js';
 
 const API = '/api';
 
@@ -24,6 +25,7 @@ const app = createApp({
     const connected = ref(false);
     const activeNames = ref(new Set());
     const alerts = ref([]);
+    const portfolioData = ref(null);
 
     async function loadState() {
       try {
@@ -136,6 +138,10 @@ const app = createApp({
     // Wallet scores (dynamic, refreshed periodically)
     const walletScores = ref([]);
 
+    async function loadPortfolio() {
+      try { const r=await fetch('/api/portfolio'); if(r.ok) portfolioData.value=await r.json(); } catch(e){}
+    }
+
     async function loadScores() {
       try {
         const resp = await fetch(`${API}/wallets/scores`);
@@ -143,11 +149,11 @@ const app = createApp({
       } catch (e) {}
     }
 
-    onMounted(() => { loadState(); loadScores(); connect(); });
+    onMounted(() => { loadState(); loadScores(); loadPortfolio(); connect(); });
 
     function catLabel(c) { const m={Weather:'天气',Politics:'政治',Sports:'体育',Tech:'科技',Culture:'文化'}; return m[c]||c||'—'; }
 
-    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, walletScores, catLabel, addWallet, removeWallet };
+    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, walletScores, portfolioData, catLabel, addWallet, removeWallet };
   }
 });
 
@@ -161,5 +167,6 @@ app.component('PnlTrendChart', PnlTrendChart);
 app.component('AlertConfigPanel', AlertConfigPanel);
 app.component('ToastContainer', ToastContainer);
 app.component('BacktestPanel', BacktestPanel);
+app.component('PortfolioPanel', PortfolioPanel);
 
 app.mount('#app');

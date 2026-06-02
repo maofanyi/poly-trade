@@ -1,4 +1,5 @@
 """Full state snapshot API + health check."""
+import urllib.request, urllib.parse
 from fastapi import APIRouter
 from database import get_db
 from config import INITIAL_CAPITAL
@@ -103,3 +104,20 @@ def health():
         "wallets": wallet_count,
         "db_persisted": db_exists
     }
+
+@router.get("/market/{slug:path}/trades")
+def get_market_trades(slug: str, limit: int = 50):
+    """Get recent trades for a market (for price chart)."""
+    import json as _json
+    url = f"https://data-api.polymarket.com/trades?slug={urllib.parse.quote(slug)}&limit={limit}"
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        trades = _json.loads(resp.read())
+    points = []
+    for t in (trades or []):
+        points.append({
+            "t": int(t.get("timestamp", 0)),
+            "p": float(t.get("price", 0)),
+            "o": t.get("outcome", ""),
+        })
+    return {"slug": slug, "points": points}

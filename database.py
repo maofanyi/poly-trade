@@ -113,5 +113,10 @@ def init_db():
             score REAL DEFAULT 0,
             updated_at TEXT DEFAULT (datetime('now','localtime'))
         );
+
+        CREATE TABLE IF NOT EXISTS closed_markets (
+            slug TEXT PRIMARY KEY,
+            detected_at TEXT DEFAULT (datetime('now','localtime'))
+        );
     """)
     db.commit()

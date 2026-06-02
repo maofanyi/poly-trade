@@ -82,6 +82,16 @@ def _is_market_expiring(slug: str, min_seconds: int = 3600) -> bool:
     return remaining < min_seconds
 
 
+def _is_market_closed(db, slug: str) -> bool:
+    row = db.execute("SELECT slug FROM closed_markets WHERE slug = ?", (slug,)).fetchone()
+    return row is not None
+
+
+def _mark_market_closed(db, slug: str):
+    db.execute("INSERT OR IGNORE INTO closed_markets (slug) VALUES (?)", (slug,))
+    db.commit()
+
+
 def scan_wallet(db, wallet: dict, ms: int) -> int:
     """Scan one wallet for new trades. Returns count of new trades processed."""
     wallet_id = get_wallet_id(db, wallet['name'])
@@ -169,6 +179,17 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
             processed += 1
             continue
 
+        # Skip known closed markets
+        if _is_market_closed(db, slug):
+            log_trade(db, wallet_id,
+                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
+                      sim_usd=0, fill_price=None, status='SKIPPED',
+                      slippage=0, pnl_realized=0,
+                      slug=slug, outcome=outcome, timestamp=ts)
+            print(f"    {side} SKIP (market closed: {slug[:30]})")
+            processed += 1
+            continue
+
         result = place_market_order(acct, slug, outcome, trade_side, sim_usd)
         post_bal = ensure_account(acct)
 
@@ -207,6 +228,8 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
         else:
             err = str(result.get('error', '')) if result else 'no response'
             status = 'SKIPPED' if ('not found' in err.lower() or 'MARKET_NOT_FOUND' in err) else 'FAILED'
+            if status == 'SKIPPED':
+                _mark_market_closed(db, slug)
             log_trade(db, wallet_id,
                       txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
                       sim_usd=0, fill_price=None, status=status,

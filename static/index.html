@@ -146,6 +146,7 @@ tbody tr:hover td { background: rgba(0,230,118,0.03); }
   <div v-show="activeTab==='analytics'">
     <pnl-trend-chart :wallets="wallets"></pnl-trend-chart>
     <alert-config-panel></alert-config-panel>
+    <backtest-panel></backtest-panel>
   </div>
   <toast-container :alerts="alerts"></toast-container>
   <div class="status-footer">数据源: SQLite · WebSocket 实时推送</div>

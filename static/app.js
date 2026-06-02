@@ -9,6 +9,7 @@ import WalletTable from './components/WalletTable.js';
 import PnlTrendChart from './components/PnlTrendChart.js';
 import AlertConfigPanel from './components/AlertConfigPanel.js';
 import ToastContainer from './components/ToastContainer.js';
+import BacktestPanel from './components/BacktestPanel.js';
 
 const API = '/api';
 
@@ -159,5 +160,6 @@ app.component('WalletTable', WalletTable);
 app.component('PnlTrendChart', PnlTrendChart);
 app.component('AlertConfigPanel', AlertConfigPanel);
 app.component('ToastContainer', ToastContainer);
+app.component('BacktestPanel', BacktestPanel);
 
 app.mount('#app');

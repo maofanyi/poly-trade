@@ -33,8 +33,24 @@ export default {
         </div>
       </div>
 
-      <!-- Whale Trade -->
-      <div class="modal-section">
+      <!-- Position (if HOLD) or Whale Trade -->
+      <div class="modal-section" v-if="isPosition()">
+        <div class="modal-section-title">💎 持仓详情</div>
+        <div class="modal-card">
+          <div class="modal-grid">
+            <div><span class="label">方向</span><span class="value" style="color:var(--blue);">持仓</span></div>
+            <div><span class="label">份额</span><span class="value mono">{{ (trade.size||0).toFixed(0) }} 份</span></div>
+            <div><span class="label">成本价</span><span class="value mono">\${{ (trade.whale_price||0).toFixed(4) }}</span></div>
+            <div><span class="label">现价</span><span class="value mono">\${{ (trade.fill_price||0).toFixed(4) }}</span></div>
+          </div>
+          <div class="modal-row"><span class="label">市值</span><span class="value mono">\${{ (trade.sim_usd||0).toFixed(2) }}</span></div>
+          <div class="modal-row" v-if="trade.pnl_realized">
+            <span class="label">浮动盈亏</span>
+            <span class="value mono" :class="trade.pnl_realized>=0?'green':'red'">{{ trade.pnl_realized>=0?'+':'' }}\${{ trade.pnl_realized.toFixed(4) }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-section" v-else>
         <div class="modal-section-title">🐋 鲸鱼交易</div>
         <div class="modal-card">
           <div class="modal-grid">
@@ -94,8 +110,9 @@ export default {
       const s=this.trade?this.trade.status:''; if(s==='FILLED')return'status-filled'; if(s==='SKIPPED')return'status-skipped'; return'status-failed';
     },
     statusLabel(){
-      const s=this.trade?this.trade.status:''; if(s==='FILLED')return'已成交'; if(s==='SKIPPED'||s==='HISTORICAL')return'已跳过'; return'失败';
-    }
+      const s=this.trade?this.trade.status:''; if(s==='FILLED')return'已成交'; if(s==='SKIPPED'||s==='HISTORICAL')return'已跳过'; if(s==='POSITION')return'持仓中'; return'失败';
+    },
+    isPosition(){ return this.trade&&this.trade.status==='POSITION'; }
   },
   watch: {
     trade: {

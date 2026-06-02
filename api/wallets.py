@@ -169,6 +169,37 @@ def reset_wallets_to_defaults():
     count = db.execute("SELECT COUNT(*) FROM wallets WHERE active = 1").fetchone()[0]
     return {"ok": True, "active_wallets": count, "message": f"Reset to {count} default wallets"}
 
+@router.get("/{wallet_id}/positions")
+def get_wallet_positions(wallet_id: int):
+    """Get current open positions with unrealized P&L."""
+    db = get_db()
+    wallet = db.execute("SELECT name FROM wallets WHERE id = ?", (wallet_id,)).fetchone()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    acct = f"copy-{wallet['name']}"
+    from trader import get_portfolio, get_midpoint
+    positions = get_portfolio(acct)
+    result = []
+    for pos in (positions or []):
+        slug = pos.get('slug', '')
+        outcome = pos.get('outcome', '')
+        shares = pos.get('shares', 0)
+        if shares <= 0: continue
+        cost_row = db.execute("""
+            SELECT AVG(fill_price) as avg_cost FROM trade_log
+            WHERE wallet_id=? AND slug=? AND outcome=? AND side='BUY' AND status='FILLED'
+        """, (wallet_id, slug, outcome)).fetchone()
+        cost_basis = round(cost_row['avg_cost'] or 0, 4) if cost_row else 0
+        mid = get_midpoint(slug)
+        live_price = None
+        if mid: live_price = mid.get(outcome.upper(), mid.get(outcome.lower()))
+        unrealized = round((live_price - cost_basis) * shares, 4) if live_price and cost_basis else None
+        result.append({"slug":slug,"outcome":outcome,"shares":round(shares,4),
+                       "cost_basis":cost_basis,"live_price":live_price,
+                       "unrealized_pnl":unrealized,
+                       "value":round(shares*(live_price or cost_basis or 0),2)})
+    return result
+
 from scores import get_wallet_scores, refresh_all_scores
 
 @router.get("/scores")

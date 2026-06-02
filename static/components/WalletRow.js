@@ -1,6 +1,10 @@
 export default {
   template: `<tr>
-    <td><span v-if="monitoring" style="color:var(--green);font-weight:700;">● 监控中</span><span v-else style="color:var(--muted);">○</span></td>
+    <td>
+      <span v-if="wallet.paused" style="color:var(--red);" title="已暂停止损">⏸</span>
+      <span v-else-if="monitoring" style="color:var(--green);font-weight:700;">● 监控中</span>
+      <span v-else style="color:var(--muted);">○</span>
+    </td>
     <td style="font-weight:600;">{{ wallet.name }}</td>
     <td class="addr" :title="wallet.addr">{{ wallet.addr.slice(0,6) }}...{{ wallet.addr.slice(-4) }}</td>
     <td><span class="cat-tag" :class="catClass">{{ catName }}</span></td>

@@ -16,8 +16,14 @@ export default {
       <div class="summary-item"><span class="summary-label">最终市值</span><span class="summary-value mono green">\${{ result.final_value }}</span></div>
       <div class="summary-item"><span class="summary-label">累计盈亏</span><span class="summary-value mono" :class="(result.pnl||0)>=0?'green':'red'">\${{ (result.pnl||0).toFixed(2) }}</span></div>
       <div class="summary-item"><span class="summary-label">回报率</span><span class="summary-value mono" :class="(result.pnl_pct||0)>=0?'green':'red'">{{ (result.pnl_pct||0)>=0?'+':''}}{{ result.pnl_pct }}%</span></div>
+      <div class="summary-item"><span class="summary-label">已实现盈亏</span><span class="summary-value mono" :class="(result.realized_pnl||0)>=0?'green':'red'">\${{ (result.realized_pnl||0).toFixed(2) }}</span></div>
       <div class="summary-item"><span class="summary-label">模拟交易</span><span class="summary-value mono muted">{{ result.trades_analyzed }} 笔</span></div>
       <div class="summary-item"><span class="summary-label">持仓中</span><span class="summary-value mono muted">{{ result.open_positions }} 个</span></div>
+      <div class="summary-item" v-if="result.expired_positions"><span class="summary-label">已过期(归零)</span><span class="summary-value mono red">{{ result.expired_positions }} 个</span></div>
+      <div class="summary-item" v-if="result.expired_loss"><span class="summary-label">过期亏损</span><span class="summary-value mono red">-\${{ result.expired_loss?.toFixed(2) }}</span></div>
+    </div>
+    <div v-if="result && result.warnings && result.warnings.length" style="margin-top:10px;">
+      <div v-for="w in result.warnings" :key="w" style="font-size:11px;color:var(--amber);padding:3px 0;">⚠️ {{ w }}</div>
     </div>
     <div v-if="result && result.error" class="muted" style="padding:10px;">{{ result.error }}</div>
   </div>`,

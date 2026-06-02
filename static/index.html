@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polymarket 跟单监控面板</title>
+<script type="importmap">
+{
+  "imports": {
+    "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js",
+    "echarts": "https://unpkg.com/echarts@5/dist/echarts.esm.min.js"
+  }
+}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0e14; --card: #111821; --border: #1c2838; --border-light: #263246;
+  --green: #00e676; --red: #ff3d4f; --amber: #ffab00; --blue: #448aff;
+  --text: #e4ecf5; --muted: #5a6b7d;
+  --radius: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #0d131c; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #1c2838; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2a3f58; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Noto Sans SC', 'JetBrains Mono', sans-serif;
+  padding: 16px 20px; min-height: 100vh;
+}
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+.green { color: var(--green); } .red { color: var(--red); } .amber { color: var(--amber); } .blue { color: var(--blue); }
+.mono { font-family: 'JetBrains Mono', monospace; } .muted { color: var(--muted); }
+h1 { font-size: 18px; margin-bottom: 2px; color: var(--green); font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; }
+.sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.pulse { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 1.5s ease infinite; margin-right: 4px; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+.tab { padding: 7px 18px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--muted); cursor: pointer; font-family: inherit; font-size: 13px; transition: all 0.2s; }
+.tab:hover { border-color: var(--border-light); color: var(--text); }
+.tab.active { border-color: var(--green); color: var(--green); background: rgba(0,230,118,0.06); }
+.summary-bar { display: flex; gap: 24px; padding: 12px 18px; margin-bottom: 12px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); flex-wrap: wrap; }
+.summary-item { display: flex; flex-direction: column; gap: 2px; }
+.summary-label { font-size: 11px; color: var(--muted); }
+.summary-value { font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.filter-bar { display: flex; gap: 6px; margin-bottom: 12px; align-items: center; }
+.filter-btn { padding: 5px 14px; border: 1px solid var(--border); border-radius: 5px; background: var(--card); color: var(--muted); cursor: pointer; font-family: inherit; font-size: 12px; transition: all 0.2s; }
+.filter-btn:hover { border-color: var(--border-light); color: var(--text); }
+.filter-btn.active { border-color: var(--green); color: var(--green); background: rgba(0,230,118,0.06); }
+.pnl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.pnl-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
+.pnl-card:hover { border-color: var(--border-light); }
+.pnl-card.win { border-left: 3px solid var(--green); }
+.pnl-card.loss { border-left: 3px solid var(--red); }
+.pnl-rank { font-size: 18px; font-weight: 900; font-family: 'JetBrains Mono', monospace; min-width: 24px; color: var(--muted); text-align: center; }
+.pnl-rank.top1 { color: var(--amber); font-size: 22px; }
+.pnl-rank.top2 { color: #b0bec5; font-size: 20px; }
+.pnl-rank.top3 { color: #a1887f; font-size: 18px; }
+.pnl-info { flex: 1; overflow: hidden; }
+.pnl-name { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pnl-cat { font-size: 11px; color: var(--muted); }
+.pnl-nums { text-align: right; flex-shrink: 0; }
+.pnl-value { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.pnl-pct { font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+.section-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin: 16px 0 10px; padding-left: 8px; border-left: 2px solid var(--green); }
+.table-wrap { overflow-x: auto; max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead { position: sticky; top: 0; z-index: 1; }
+th { padding: 10px 14px; text-align: left; background: var(--card); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; }
+td { padding: 9px 14px; border-bottom: 1px solid rgba(28,40,56,0.3); }
+tbody tr:hover td { background: rgba(0,230,118,0.03); }
+.addr { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+.cat-tag { font-size: 10px; padding: 2px 8px; border-radius: 100px; font-weight: 600; white-space: nowrap; }
+.cat-tag.w { background: rgba(0,230,118,0.12); color: var(--green); }
+.cat-tag.p { background: rgba(68,138,255,0.12); color: var(--blue); }
+.cat-tag.s { background: rgba(255,171,0,0.12); color: var(--amber); }
+.cat-tag.t { background: rgba(187,134,252,0.12); color: #bb86fc; }
+.cat-tag.c { background: rgba(255,61,79,0.12); color: var(--red); }
+.btn { padding: 5px 14px; border: 1px solid var(--green); border-radius: 5px; background: rgba(0,230,118,0.08); color: var(--green); cursor: pointer; font-family: inherit; font-size: 12px; transition: all 0.2s; white-space: nowrap; }
+.btn:hover { background: rgba(0,230,118,0.18); }
+.btn.danger { border-color: var(--red); color: var(--red); background: rgba(255,61,79,0.06); }
+.btn.danger:hover { background: rgba(255,61,79,0.15); }
+.btn.muted { border-color: var(--muted); color: var(--muted); cursor: default; }
+.search-input { width: 100%; max-width: 300px; padding: 7px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px; outline: none; }
+.search-input:focus { border-color: var(--green); }
+.search-input::placeholder { color: var(--muted); }
+.trade-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 10px; }
+.trade-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.trade-card-header { padding: 9px 14px; background: rgba(0,0,0,0.25); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.trade-card-name { font-weight: 700; font-size: 12px; }
+.trade-card-body { max-height: 170px; overflow-y: auto; padding: 4px 0; }
+.trade-row { display: grid; grid-template-columns: 32px 50px 1fr 60px 60px 50px; gap: 4px; padding: 4px 10px; font-size: 11px; align-items: center; border-bottom: 1px solid rgba(28,40,56,0.3); font-family: 'JetBrains Mono', monospace; }
+.trade-row:hover { background: rgba(0,230,118,0.03); }
+.trade-side { font-weight: 700; text-align: center; padding: 1px 3px; border-radius: 2px; font-size: 9px; }
+.trade-side.buy { background: rgba(0,230,118,0.12); color: var(--green); }
+.trade-side.sell { background: rgba(255,61,79,0.12); color: var(--red); }
+.trade-qty { text-align: right; }
+.trade-market { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; }
+.trade-usd { text-align: right; color: var(--green); font-weight: 600; }
+.trade-status { text-align: right; font-size: 9px; padding: 1px 4px; border-radius: 3px; }
+.status-filled { color: var(--green); background: rgba(0,230,118,0.08); }
+.status-skipped { color: var(--amber); background: rgba(255,171,0,0.08); }
+.status-failed { color: var(--red); background: rgba(255,61,79,0.08); }
+.empty { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; }
+.status-footer { font-size: 11px; padding: 14px 0; text-align: center; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+@media(max-width:700px) {
+  body { padding: 10px; }
+  .summary-bar { gap: 14px; }
+  .summary-value { font-size: 16px; }
+  .pnl-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .trade-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <app-header :wallet-count="wallets.length"></app-header>
+  <summary-bar :s="summary"></summary-bar>
+  <div class="tabs">
+    <button class="tab" :class="{active:activeTab==='monitor'}" @click="activeTab='monitor'">📊 监控面板</button>
+    <button class="tab" :class="{active:activeTab==='wallets'}" @click="activeTab='wallets'">🔍 钱包管理</button>
+    <button class="tab" :class="{active:activeTab==='analytics'}" @click="activeTab='analytics'">📈 分析</button>
+  </div>
+  <div v-show="activeTab==='monitor'">
+    <trade-filter @filter="currentFilter=$event"></trade-filter>
+    <pnl-card-grid :wallets="sortedPnl"></pnl-card-grid>
+    <div class="section-title">📋 交易明细 ({{ filteredTrades.length }} 笔)</div>
+    <trade-list :trades="filteredTrades" :wallets="wallets" @remove="removeWallet"></trade-list>
+  </div>
+  <div v-show="activeTab==='wallets'">
+    <wallet-table :candidates="candidates" :active-names="activeNames" @add="addWallet" @remove="removeWallet"></wallet-table>
+  </div>
+  <div v-show="activeTab==='analytics'">
+    <pnl-trend-chart :wallets="wallets"></pnl-trend-chart>
+    <alert-config-panel></alert-config-panel>
+  </div>
+  <toast-container :alerts="alerts"></toast-container>
+  <div class="status-footer">数据源: SQLite · WebSocket 实时推送</div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 import sqlite3
 import os
 import threading
-from config import DB_PATH, BASE_DIR
+from config import DB_PATH
 
 _local = threading.local()
 
@@ -15,7 +15,7 @@ def get_db() -> sqlite3.Connection:
     """Get thread-local database connection."""
     if not hasattr(_local, 'db') or _local.db is None:
         _ensure_data_dir()
-        _local.db = sqlite3.connect(DB_PATH, check_same_thread=False)
+        _local.db = sqlite3.connect(DB_PATH)
         _local.db.row_factory = sqlite3.Row
         _local.db.execute("PRAGMA journal_mode=WAL")
         _local.db.execute("PRAGMA foreign_keys=ON")
@@ -26,7 +26,7 @@ def init_db():
     db = get_db()
     db.executescript("""
         CREATE TABLE IF NOT EXISTS wallets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             address TEXT NOT NULL UNIQUE,
             name TEXT NOT NULL,
             category TEXT DEFAULT 'Unknown',
@@ -35,7 +35,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS trade_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             wallet_id INTEGER NOT NULL REFERENCES wallets(id),
             txn_hash TEXT UNIQUE,
             side TEXT NOT NULL,
@@ -52,7 +52,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS pnl_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             wallet_id INTEGER NOT NULL REFERENCES wallets(id),
             cash REAL DEFAULT 0,
             total_value REAL DEFAULT 0,
@@ -62,7 +62,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS scan_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             scan_start TEXT,
             scan_end TEXT,
             new_trades_found INTEGER DEFAULT 0,
@@ -70,7 +70,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS alert_config (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             enabled INTEGER DEFAULT 1,
             pnl_threshold_pct REAL DEFAULT -20.0,
             single_loss_usd REAL DEFAULT 10.0,
@@ -80,7 +80,7 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS alert_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             alert_type TEXT NOT NULL,
             wallet_id INTEGER REFERENCES wallets(id),
             message TEXT,

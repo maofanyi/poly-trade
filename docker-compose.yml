@@ -1,6 +1,6 @@
 services:
   copy-trader:
-    build: .
+    image: mao968/poly-trade:latest
     container_name: polymarket-copy-trader
     restart: unless-stopped
     ports:

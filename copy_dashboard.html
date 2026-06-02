@@ -459,13 +459,16 @@ function render(state) {
   // Active wallet names (used by both P&L and trade cards)
   const activeNames = new Set(getActive().map(w => w.name));
 
-  // P&L Cards (only wallets in active list)
+  // P&L Cards — only wallets with actual trade activity
+  const hasActivity = (p) => Math.abs((p.total_value||500) - 500) > 0.05;
   const sortedPnl = Object.entries(walletPnl)
     .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
+    .filter(([_,p]) => hasActivity(p))
     .sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
+  const inactiveCount = Object.entries(walletPnl).filter(([name]) => activeNames.size === 0 || activeNames.has(name)).length - sortedPnl.length;
   let pnlHtml = '';
   if (sortedPnl.length === 0) {
-    pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无盈亏数据</div>';
+    pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无活跃钱包 (' + inactiveCount + '个钱包无交易数据)</div>';
   } else {
     sortedPnl.forEach(([name,p],idx) => {
       const cls = p.pnl_pct > 0.5 ? 'win' : (p.pnl_pct < -0.5 ? 'loss' : 'neutral');

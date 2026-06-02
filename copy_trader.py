@@ -102,6 +102,23 @@ MAX_TRADES_PER_SCAN = 2  # process 2 newest per wallet (speed limit)
 MONITOR_START = 1        # Will be set at startup, 1 = filter enabled
 MONITOR_START = None     # set at startup, skip all trades before this
 
+# Live P&L cache: periodically written to live_pnl.json for dashboard
+_live_pnl = {}
+UPDATE_PNL = 60
+_last_pnl_update = 0
+LIVE_PNL_FILE = os.path.join(BASE_DIR, "live_pnl.json")
+
+def _write_live_pnl():
+    """Write live P&L to JSON file for dashboard (runs in background thread)."""
+    try:
+        clean = json.dumps(copy_trader._live_pnl, ensure_ascii=False, default=str)
+        clean = clean.encode('utf-8', errors='replace').decode('utf-8')
+        tmp = LIVE_PNL_FILE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(clean)
+        os.replace(tmp, LIVE_PNL_FILE)
+    except: pass
+
 def get_midpoint(slug):
     """Get current YES/NO midpoint for a market."""
     r = pm(f"{PM_TRADER} price \"{slug}\"")
@@ -257,9 +274,27 @@ def main():
     realized_pnl = state.get('realized_pnl', {})  # per-wallet realized P&L
 
     SCAN_INTERVAL = interval
+
+    def _refresh_pnl():
+        """Background: refresh live P&L cache + write to file"""
+        copy_trader._live_pnl = get_all_pnl(realized_pnl)
+        copy_trader._last_pnl_update = time.time()
+        _write_live_pnl()
+
+    # Initial P&L write
+    _write_live_pnl()
+    # Start first refresh in background thread
+    threading.Thread(target=_refresh_pnl, daemon=True).start()
+
     while True:
         scan_count += 1
         scan_start = datetime.now()
+
+        # Refresh live P&L cache every UPDATE_PNL seconds (in background)
+        if time.time() - copy_trader._last_pnl_update > UPDATE_PNL:
+            copy_trader._last_pnl_update = time.time()  # mark first to avoid overlap
+            threading.Thread(target=_refresh_pnl, daemon=True).start()
+
         print(f"\n  --- Scan #{scan_count} {scan_start.strftime('%H:%M:%S')} ---")
 
         # Reload wallet list from config (allows dashboard add/remove without restart)
@@ -409,7 +444,8 @@ if __name__ == '__main__':
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=BASE_DIR, **kwargs)
-        def log_message(self, format, *args): pass  # silent
+        def log_message(self, format, *args): pass
+
         def do_POST(self):
             if self.path == '/save_wallets':
                 length = int(self.headers.get('Content-Length', 0))

@@ -461,21 +461,17 @@ function render(state) {
   // Active wallet names (used by both P&L and trade cards)
   const activeNames = new Set(getActive().map(w => w.name));
 
-  // Pre-compute activity: wallet is active if P&L changed OR has FILLED trades (not just SKIPPED)
-  const activeSet = new Set();
-  Object.entries(walletPnl).forEach(([name, p]) => {
-    if (Math.abs((p.total_value||500) - 500) > 0.05) activeSet.add(name);
-  });
-  simTrades.forEach(t => {
-    if (t.wallet && t.status === 'FILLED') activeSet.add(t.wallet);
-  });
+  // Simple activity check: wallet is active iff total_value differs from $500
+  const isActive = (p) => Math.abs(((p && p.total_value) || 500) - 500) > 0.05;
 
-  // P&L Cards — only wallets with actual trade activity
-  const sortedPnl = Object.entries(walletPnl)
+  // P&L Cards — only wallets with actual trade activity (P&L changed)
+  const activeList = Object.entries(walletPnl)
     .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
-    .filter(([name]) => activeSet.has(name))
-    .sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
-  const inactiveCount = Object.entries(walletPnl).filter(([name]) => activeNames.size === 0 || activeNames.has(name)).length - sortedPnl.length;
+    .filter(([_,p]) => isActive(p));
+  const sortedPnl = activeList.sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
+  const inactiveCount = Object.entries(walletPnl)
+    .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
+    .filter(([_,p]) => !isActive(p)).length;
   let pnlHtml = '';
   if (sortedPnl.length === 0) {
     pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无活跃钱包 (' + inactiveCount + '个钱包无交易数据)</div>';
@@ -514,9 +510,9 @@ function render(state) {
   const walletTrades = {};
   filtered.forEach(t => { const w = t.wallet||'?'; if(!walletTrades[w]) walletTrades[w]=[]; walletTrades[w].push(t); });
 
-  // Split wallets using same activeSet (consistent with P&L cards)
-  const activeW = allWallets.filter(w => activeSet.has(w.name));
-  const inactiveW = allWallets.filter(w => !activeSet.has(w.name));
+  // Split wallets using same isActive (single source of truth)
+  const activeW = allWallets.filter(w => isActive(walletPnl[w.name]));
+  const inactiveW = allWallets.filter(w => !isActive(walletPnl[w.name]));
 
   function renderTradeCard(w) {
     const wt = (walletTrades[w.name]||[]).slice(-8).reverse();

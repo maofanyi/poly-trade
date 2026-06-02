@@ -517,7 +517,7 @@ function render(state) {
       + '<span class="trade-card-name">'+w.name+' <span style="color:var(--muted);font-weight:400;font-size:10px;">'+metaStr+'</span></span>'
       + '<span style="display:flex;align-items:center;gap:8px;">'
       + '<span class="cat-tag '+((w.cat||'Weather')[0].toLowerCase())+'">'+(CAT_NAMES[w.cat]||w.cat)+'</span>'
-      + '<button class="btn-xs remove" onclick="removeWalletMonitor(\\''+w.name+'\\')" title="停止跟单" style="font-size:9px;">✕</button>'
+      + '<button class="btn-xs remove" onclick="removeWalletMonitor(\x27'+w.name+'\x27)" title="停止跟单" style="font-size:9px;">✕</button>'
       + '</span></div>'
       + '<div class="trade-card-body">';
     if (wt.length===0) h += '<div class="empty">等待新交易...<br><span style="font-size:9px;color:var(--muted)">监控自 '+(state.monitor_start||'启动')+'</span></div>';
@@ -543,7 +543,7 @@ function render(state) {
 
   let tradeHtml = activeW.map(w => renderTradeCard(w)).join('');
   if (inactiveW.length > 0) {
-    tradeHtml += '<div class="section-title" onclick="var n=this.nextElementSibling;var v=n.style.display===\\'none\\';n.style.display=v?\\'\\':\\'none\\';this.textContent=v?\\'📦 未激活钱包 ('+inactiveW.length+') ▲\\':\\'📦 未激活钱包 ('+inactiveW.length+') — 点击展开\\';" style="cursor:pointer;user-select:none;">'
+    tradeHtml += '<div class="section-title" id="inactiveToggle" onclick="var n=this.nextElementSibling;var v=n.style.display===\x27none\x27;n.style.display=v?\x27\x27:\x27none\x27;this.textContent=v?\x27📦 未激活钱包 ('+inactiveW.length+') ▲\x27:\x27📦 未激活钱包 ('+inactiveW.length+') — 点击展开\x27;" style="cursor:pointer;user-select:none;">'
       + '📦 未激活钱包 ('+inactiveW.length+') — 点击展开</div>';
     tradeHtml += '<div style="display:none;">'+inactiveW.map(w => renderTradeCard(w)).join('')+'</div>';
   }

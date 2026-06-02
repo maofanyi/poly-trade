@@ -1,0 +1,47 @@
+{
+  "holdings": [
+    {
+      "ticker": "SOXL",
+      "name": "Direxion Daily Semiconductor Bu",
+      "shares": 20,
+      "cost_price": 17.1,
+      "current_price": 224.34,
+      "market_value": 4486.8,
+      "cost_basis": 342,
+      "pnl_pct": 1211.93,
+      "signal": "待TradingAgents分析"
+    },
+    {
+      "ticker": "NVDA",
+      "name": "NVIDIA Corp.",
+      "shares": 2,
+      "cost_price": 125.47,
+      "current_price": 211.14,
+      "market_value": 422.28,
+      "cost_basis": 250.94,
+      "pnl_pct": 68.28,
+      "signal": "待TradingAgents分析"
+    },
+    {
+      "ticker": "TSLA",
+      "name": "Tesla Inc.",
+      "shares": 1,
+      "cost_price": 335,
+      "current_price": 435.79,
+      "market_value": 435.79,
+      "cost_basis": 335,
+      "pnl_pct": 30.09,
+      "signal": "待TradingAgents分析"
+    }
+  ],
+  "watchlist": [
+    "MU",
+    "SNDK",
+    "TSM"
+  ],
+  "analysis_date": "2026-06-01",
+  "total_portfolio_value": 5344.87,
+  "total_cost_basis": 927.94,
+  "total_pnl_pct": 475.99,
+  "request": "请对以上每只持仓和关注股票进行分析，给出: 1)评级(Buy/Sell/Hold) 2)目标价 3)止损价 4)止盈价 5)持仓调整建议"
+}

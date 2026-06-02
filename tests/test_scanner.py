@@ -38,3 +38,20 @@ def test_get_cost_basis():
 
     cost, shares = get_cost_basis(db, 1, 'nonexistent')
     assert cost == 0
+
+def test_sell_without_position_is_skipped():
+    """Verify has_position returns False for a fresh account with no trades."""
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    os.environ["DB_PATH"] = ":memory:"
+    os.environ["SCAN_ENABLED"] = "0"
+    from database import init_db, get_db
+    from trader import has_position
+    init_db()
+    db = get_db()
+    db.execute("DELETE FROM trade_log")
+    db.execute("DELETE FROM wallets")
+    db.commit()
+    db.execute("INSERT INTO wallets (id, address, name) VALUES (1, '0xatest', 'ATest')")
+    db.commit()
+    assert not has_position('copy-ATest', 'some-market', 'Yes')

@@ -146,6 +146,17 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
             processed += 1
             continue
 
+        # SELL guard: skip if we don't hold this position
+        if side == 'SELL' and not has_position(acct, slug, outcome):
+            log_trade(db, wallet_id,
+                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
+                      sim_usd=0, fill_price=None, status='SKIPPED',
+                      slippage=0, pnl_realized=0,
+                      slug=slug, outcome=outcome, timestamp=ts)
+            print(f"    {side} SKIP (no position to sell for {outcome} in {slug[:30]})")
+            processed += 1
+            continue
+
         # Expiry check: skip markets expiring within 1 hour
         if _is_market_expiring(slug, 3600):
             log_trade(db, wallet_id,

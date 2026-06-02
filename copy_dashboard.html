@@ -402,9 +402,17 @@ function filterTime(trades) {
 }
 
 // ===== LOAD & RENDER =====
+let _lastValidState = null;
 async function load() {
-  try { const resp = await fetch(STATE_URL + '?t=' + Date.now()); if (!resp.ok) throw new Error('empty'); return await resp.json(); }
-  catch(e) { return null; }
+  try {
+    const resp = await fetch(STATE_URL + '?t=' + Date.now());
+    if (!resp.ok) throw new Error('empty');
+    const data = await resp.json();
+    _lastValidState = data;  // cache valid state
+    return data;
+  } catch(e) {
+    return _lastValidState;  // use cache if file is being written
+  }
 }
 
 function render(state) {

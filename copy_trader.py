@@ -9,13 +9,14 @@ from collections import defaultdict
 import urllib.request
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-# Safe print: won't crash on closed stdout (e.g., under Start-Process)
+# Flush stdout after every print for reliable logging
 import builtins
 _real_print = builtins.print
-def _safe_print(*args, **kwargs):
+def _flushing_print(*args, **kwargs):
+    kwargs.setdefault('flush', True)
     try: _real_print(*args, **kwargs)
-    except: _real_print(*args, file=sys.stderr, **kwargs)
-builtins.print = _safe_print
+    except: pass
+builtins.print = _flushing_print
 
 # ===== CONFIG =====
 DATA_API = "https://data-api.polymarket.com"
@@ -69,11 +70,14 @@ def load_state():
     return {"seen_txns": [], "sim_trades": [], "wallet_pnl": {}, "last_scan": None}
 
 def save_state(st):
-    with open(STATE_FILE, 'w') as f: json.dump(st, f, indent=2, ensure_ascii=False)
+    """Atomic write: temp file + rename avoids readers seeing partial data."""
+    tmp = STATE_FILE + '.tmp'
+    with open(tmp, 'w') as f: json.dump(st, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, STATE_FILE)  # atomic on same filesystem
 
 def pm(cmd):
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
         return json.loads(r.stdout.strip())
     except: return None
 
@@ -90,7 +94,7 @@ def ensure_account(acct):
 
 PRICE_TOLERANCE = 0.05   # 5 cents drift ok for slow markets
 PRICE_WAIT = 5           # seconds to wait
-MAX_TRADES_PER_SCAN = 5  # process 5 newest per wallet
+MAX_TRADES_PER_SCAN = 2  # process 2 newest per wallet (speed limit)
 MONITOR_START = 1        # Will be set at startup, 1 = filter enabled
 MONITOR_START = None     # set at startup, skip all trades before this
 
@@ -437,11 +441,9 @@ if __name__ == '__main__':
     import copy_trader
     copy_trader.MONITOR_START = int(datetime.now().timestamp())
 
-    # Use sys.stderr to avoid I/O errors from closed stdout under Start-Process
-    import sys as _sys
-    _sys.stderr.write(f"\n  Dashboard: http://localhost:8766/copy_dashboard.html\n")
-    _sys.stderr.write(f"  Monitor start: {datetime.fromtimestamp(copy_trader.MONITOR_START).strftime('%Y-%m-%d %H:%M:%S')}\n")
-    _sys.stderr.write(f"  Only new trades from now. Historical data ignored.\n\n")
+    print(f"\n  Dashboard: http://localhost:8766/copy_dashboard.html")
+    print(f"  Monitor start: {datetime.fromtimestamp(copy_trader.MONITOR_START).strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  Only new trades from now. Historical data ignored.\n")
 
     old_state = load_state()
     realized_init = old_state.get('realized_pnl', {})
@@ -456,6 +458,6 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        _sys.stderr.write("\n\n  Stopped.\n")
+        print("\n\n  Stopped.")
         httpd.shutdown()
         save_state(load_state())

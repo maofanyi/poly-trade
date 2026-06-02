@@ -61,3 +61,13 @@ def remove_wallet(wallet_id: int):
     db.execute("UPDATE wallets SET active = 0 WHERE id = ?", (wallet_id,))
     db.commit()
     return {"ok": True, "name": row["name"]}
+
+@router.get("/{wallet_id}/pnl")
+def get_wallet_pnl_history(wallet_id: int, days: int = 7):
+    db = get_db()
+    rows = db.execute("""
+        SELECT * FROM pnl_snapshots
+        WHERE wallet_id = ? AND timestamp >= datetime('now', 'localtime', ?)
+        ORDER BY timestamp ASC
+    """, (wallet_id, f'-{days} days')).fetchall()
+    return [dict(r) for r in rows]

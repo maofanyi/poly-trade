@@ -2,6 +2,8 @@
 from fastapi import APIRouter
 from database import get_db
 from config import INITIAL_CAPITAL
+from models import AlertConfigUpdate
+from alerts import update_config as alerts_update_config
 
 router = APIRouter(prefix="/api", tags=["state"])
 
@@ -63,6 +65,22 @@ def get_state():
         },
         "last_scan": last_scan["scan_end"] if last_scan else None
     }
+
+@router.get("/alerts")
+def get_alert_config():
+    db = get_db()
+    row = db.execute("SELECT * FROM alert_config WHERE id = 1").fetchone()
+    if not row:
+        db.execute("INSERT INTO alert_config (id) VALUES (1)")
+        db.commit()
+        return {"enabled": 1, "pnl_threshold_pct": -20.0, "single_loss_usd": 10.0, "webhook_type": None, "webhook_url": None}
+    return dict(row)
+
+@router.put("/alerts")
+def update_alert_config(data: AlertConfigUpdate):
+    db = get_db()
+    alerts_update_config(db, **{k: v for k, v in data.dict().items() if v is not None})
+    return {"ok": True}
 
 @router.get("/health")
 def health():

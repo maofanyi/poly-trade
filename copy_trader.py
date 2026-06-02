@@ -72,8 +72,12 @@ def load_state():
 def save_state(st):
     """Atomic write: temp file + rename avoids readers seeing partial data."""
     tmp = STATE_FILE + '.tmp'
-    with open(tmp, 'w') as f: json.dump(st, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, STATE_FILE)  # atomic on same filesystem
+    # Sanitize: replace any non-UTF8 bytes before writing
+    clean = json.dumps(st, indent=2, ensure_ascii=False)
+    clean = clean.encode('utf-8', errors='replace').decode('utf-8')
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(clean)
+    os.replace(tmp, STATE_FILE)
 
 def pm(cmd):
     try:

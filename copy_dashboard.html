@@ -424,9 +424,11 @@ function render(state) {
   const simTrades = state.sim_trades || [];
   const walletPnl = state.wallet_pnl || {};
 
-  // Single source of truth: wallet is active if it has ≥1 FILLED trade
+  // Activity = P&L changed (from pm-trader SQLite, persistent across restarts)
   const activeWallets = new Set();
-  simTrades.forEach(t => { if (t.wallet && t.status === 'FILLED') activeWallets.add(t.wallet); });
+  Object.entries(walletPnl).forEach(([name, p]) => {
+    if (Math.abs((p.total_value || 500) - 500) > 0.05) activeWallets.add(name);
+  });
 
   const actionable = simTrades.filter(t => t.status === 'FILLED' || t.status === 'LIMIT_PLACED' || t.status === 'DRY_RUN');
   const skipped = simTrades.filter(t => t.status === 'SKIPPED' || t.status === 'HISTORICAL' || t.status === 'FAILED');

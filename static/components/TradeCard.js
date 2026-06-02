@@ -8,13 +8,13 @@ export default {
       </span>
     </div>
     <div class="trade-card-body">
-      <div v-for="t in trades" :key="t.id" class="trade-row">
-        <span class="trade-side" :class="(t.side||'').toLowerCase()">{{ t.side==='BUY'?'买':'卖' }}</span>
-        <span class="trade-qty">{{ (t.size||0).toFixed(0) }}</span>
-        <span class="trade-market">{{ (t.slug||'').slice(0,35) }}</span>
-        <span class="trade-usd">\${{ (t.sim_usd||0).toFixed(2) }}</span>
-        <span class="trade-slip" :class="(t.slippage||0)<0.01?'green':'red'">{{ t.slippage != null ? '\$'+t.slippage.toFixed(4) : '—' }}</span>
-        <span class="trade-status" :class="statusClass(t.status)">{{ statusLabel(t.status) }}</span>
+      <div v-for="t in trades" :key="t.id" class="trade-row" :title="rowTitle(t)">
+        <span class="trade-side" :class="(t.side||'').toLowerCase()" :title="t.side==='BUY'?'买入':'卖出'">{{ t.side==='BUY'?'买':'卖' }}</span>
+        <span class="trade-qty" title="鲸鱼交易量(份)">{{ (t.size||0).toFixed(0) }}</span>
+        <span class="trade-market" :title="t.slug||''">{{ (t.slug||'').slice(0,35) }}</span>
+        <span class="trade-usd" :title="'模拟跟单金额: \$'+(t.sim_usd||0).toFixed(2)">\${{ (t.sim_usd||0).toFixed(2) }}</span>
+        <span class="trade-slip" :class="(t.slippage||0)<0.01?'green':'red'" :title="'滑点(成交价 vs 鲸鱼价 \$'+((t.whale_price)||0).toFixed(4)+')'">{{ t.slippage != null ? '\$'+t.slippage.toFixed(4) : '—' }}</span>
+        <span class="trade-status" :class="statusClass(t.status)" :title="statusTooltip(t)">{{ statusLabel(t.status) }}</span>
       </div>
     </div>
   </div>`,
@@ -23,6 +23,15 @@ export default {
   computed: { catClass(){ const m={Weather:'w',Politics:'p',Sports:'s',Tech:'t',Culture:'c'}; return m[this.walletCat]||'w'; } },
   methods: {
     statusClass(s){ if(s==='FILLED')return'status-filled'; if(s==='SKIPPED')return'status-skipped'; return'status-failed'; },
-    statusLabel(s){ if(s==='FILLED')return'已成交'; if(s==='SKIPPED'||s==='HISTORICAL')return'已跳过'; return'失败'; }
+    statusLabel(s){ if(s==='FILLED')return'已成交'; if(s==='SKIPPED'||s==='HISTORICAL')return'已跳过'; return'失败'; },
+    statusTooltip(t){
+      const base = this.statusLabel(t.status);
+      if (t.status==='FILLED') return base + ' @ \$' + (t.fill_price||0).toFixed(4);
+      if (t.status==='FAILED') return base + ': ' + (t.reason||'未知错误');
+      return base;
+    },
+    rowTitle(t){
+      return '鲸鱼' + (t.side==='BUY'?'买入':'卖出') + ' ' + (t.size||0).toFixed(0) + '份 × \$' + (t.whale_price||0).toFixed(4) + ' | 跟单\$' + (t.sim_usd||0).toFixed(2) + ' | 成交价\$' + (t.fill_price||'?').toString();
+    }
   }
 };

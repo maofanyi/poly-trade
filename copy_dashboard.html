@@ -408,7 +408,12 @@ async function load() {
     ]);
     if (!stateResp.ok) throw new Error('empty');
     const data = await stateResp.json();
-    if (pnlResp.ok) { try { data.wallet_pnl = await pnlResp.json(); } catch(e) {} }
+    if (pnlResp.ok) {
+      try {
+        const live = await pnlResp.json();
+        if (live && Object.keys(live).length > 3) data.wallet_pnl = live;
+      } catch(e) {}
+    }
     return data;
   } catch(e) { return null; }
 }
@@ -548,6 +553,9 @@ function showToast(msg) {
 // ===== INIT =====
 function updateClock() { document.getElementById('clock').textContent = new Date().toLocaleString('zh-CN',{hour12:false}); }
 setInterval(updateClock,1000); updateClock();
+
+// ?reset clears localStorage for fresh start
+if (location.search.includes('reset')) { localStorage.removeItem(STORAGE_KEY); location.replace(location.pathname); }
 
 async function refresh() { const state = await load(); if (state) render(state); }
 refresh(); setInterval(refresh, 5000);

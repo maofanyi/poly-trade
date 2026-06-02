@@ -83,6 +83,10 @@ const app = createApp({
         .sort((a, b) => (b.pnl_pct || 0) - (a.pnl_pct || 0))
     );
 
+    const inactiveWallets = computed(() =>
+      [...wallets.value].filter(w => w.pnl_pct == null)
+    );
+
     async function addWallet(addr, name, cat) {
       try {
         await fetch(`${API}/wallets`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: addr, name, category: cat }) });
@@ -130,7 +134,9 @@ const app = createApp({
 
     onMounted(() => { loadState(); connect(); });
 
-    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, pnlHistory, connected, activeNames, alerts, candidates, addWallet, removeWallet };
+    function catLabel(c) { const m={Weather:'天气',Politics:'政治',Sports:'体育',Tech:'科技',Culture:'文化'}; return m[c]||c||'—'; }
+
+    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, catLabel, addWallet, removeWallet };
   }
 });
 

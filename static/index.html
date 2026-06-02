@@ -126,6 +126,17 @@ tbody tr:hover td { background: rgba(0,230,118,0.03); }
   <div v-show="activeTab==='monitor'">
     <trade-filter @filter="currentFilter=$event"></trade-filter>
     <pnl-card-grid :wallets="sortedPnl"></pnl-card-grid>
+    <div v-if="inactiveWallets.length > 0" style="margin-bottom:12px;">
+      <div class="section-title">⏳ 等待首笔交易 ({{ inactiveWallets.length }})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span v-for="w in inactiveWallets" :key="w.id"
+          style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:12px;display:inline-flex;align-items:center;gap:8px;">
+          <span style="font-weight:600;">{{ w.name }}</span>
+          <span class="cat-tag" :class="(w.category||'W')[0].toLowerCase()">{{ catLabel(w.category) }}</span>
+          <span class="muted" style="font-size:10px;">等待中</span>
+        </span>
+      </div>
+    </div>
     <div class="section-title">📋 交易明细 ({{ filteredTrades.length }} 笔)</div>
     <trade-list :trades="filteredTrades" :wallets="wallets" @remove="removeWallet"></trade-list>
   </div>

@@ -13,7 +13,7 @@ export default {
         <span class="trade-qty" title="鲸鱼交易量(份)">{{ (t.size||0).toFixed(0) }}</span>
         <span class="trade-market" :title="t.slug||''">{{ (t.slug||'').slice(0,35) }}</span>
         <span class="trade-usd" :title="'模拟跟单金额: \$'+(t.sim_usd||0).toFixed(2)">\${{ (t.sim_usd||0).toFixed(2) }}</span>
-        <span class="trade-slip" :class="(t.slippage||0)<0.01?'green':'red'" :title="'滑点(成交价 vs 鲸鱼价 \$'+((t.whale_price)||0).toFixed(4)+')'">{{ t.slippage != null ? '\$'+t.slippage.toFixed(4) : '—' }}</span>
+        <span class="trade-slip" :class="slipClass(t)" :title="'鲸鱼价\$'+((t.whale_price)||0).toFixed(4)+' → 成交价\$'+((t.fill_price)||0).toFixed(4)+' | 滑点='+slipPct(t)+'%'">{{ slipPct(t) }}%</span>
         <span class="trade-status" :class="statusClass(t.status)" :title="statusTooltip(t)">{{ statusLabel(t.status) }}</span>
       </div>
     </div>
@@ -30,8 +30,10 @@ export default {
       if (t.status==='FAILED') return base + ': ' + (t.reason||'未知错误');
       return base;
     },
+    slipPct(t){ return (t.whale_price > 0 && t.fill_price) ? Math.abs((t.fill_price - t.whale_price) / t.whale_price * 100).toFixed(2) : '0.00'; },
+    slipClass(t){ const p = parseFloat(this.slipPct(t)); return p < 1 ? 'green' : (p < 5 ? 'muted' : 'red'); },
     rowTitle(t){
-      return '鲸鱼' + (t.side==='BUY'?'买入':'卖出') + ' ' + (t.size||0).toFixed(0) + '份 × \$' + (t.whale_price||0).toFixed(4) + ' | 跟单\$' + (t.sim_usd||0).toFixed(2) + ' | 成交价\$' + (t.fill_price||'?').toString();
+      return '鲸鱼' + (t.side==='BUY'?'买入':'卖出') + ' ' + (t.size||0).toFixed(0) + '份 × \$' + (t.whale_price||0).toFixed(4) + ' | 跟单\$' + (t.sim_usd||0).toFixed(2) + ' | 成交\$' + (t.fill_price||'?').toString() + ' | 滑点' + this.slipPct(t) + '%';
     }
   }
 };

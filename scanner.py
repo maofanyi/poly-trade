@@ -120,7 +120,8 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
             td = result['data']['trade']
             fill_price = td.get('avg_price', whale_price)
             fill_shares = td.get('shares', 0)
-            fill_slippage = td.get('slippage', 0)
+            # Compute our own slippage: absolute price difference (USD per share)
+            fill_slippage = round(abs(fill_price - whale_price) if fill_price else 0, 6)
 
             pnl_realized = 0.0
             if side == 'SELL':

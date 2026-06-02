@@ -138,12 +138,17 @@ def run_backtest(address: str, days: int = 30) -> dict:
                         if m_slug == slug or m_slug in slug:
                             outcomes = m.get('outcomes', [])
                             prices = m.get('outcomePrices', [])
-                            for i, (outcome, price_str) in enumerate(zip(outcomes, prices)):
-                                try:
-                                    p = float(price_str)
-                                except (ValueError, TypeError):
-                                    p = 0
-                                if p >= 0.99:  # This outcome resolved to $1 (winner)
+                            # Parse JSON strings if needed
+                            if isinstance(outcomes, str):
+                                try: outcomes = json.loads(outcomes)
+                                except: outcomes = []
+                            if isinstance(prices, str):
+                                try: prices = json.loads(prices)
+                                except: prices = []
+                            for outcome, price_str in zip(outcomes, prices):
+                                try: p = float(price_str)
+                                except: p = 0
+                                if p >= 0.99:
                                     resolution = outcome
                                     break
                             break

@@ -154,8 +154,6 @@ h1{font-size:18px;margin-bottom:2px;color:var(--green);font-family:'JetBrains Mo
   <div class="pnl-grid" id="pnlGrid"></div>
   <div class="section-title">📋 交易明细 <span class="section-count" id="filterLabel"></span></div>
   <div class="trade-grid" id="tradeGrid"></div>
-  <div class="section-title" id="inactiveTitle" style="display:none;">📦 未激活钱包 (<span id="inactiveCount">0</span>)</div>
-  <div class="trade-grid" id="inactiveGrid"></div>
 </div>
 
 <!-- ===== TAB 2: WALLET DISCOVERY ===== -->
@@ -402,17 +400,9 @@ function filterTime(trades) {
 }
 
 // ===== LOAD & RENDER =====
-let _lastValidState = null;
 async function load() {
-  try {
-    const resp = await fetch(STATE_URL + '?t=' + Date.now());
-    if (!resp.ok) throw new Error('empty');
-    const data = await resp.json();
-    _lastValidState = data;  // cache valid state
-    return data;
-  } catch(e) {
-    return _lastValidState;  // use cache if file is being written
-  }
+  try { const resp = await fetch(STATE_URL + '?t=' + Date.now()); if (!resp.ok) throw new Error('empty'); return await resp.json(); }
+  catch(e) { return null; }
 }
 
 function render(state) {
@@ -423,13 +413,7 @@ function render(state) {
   stateCache = state;
   const simTrades = state.sim_trades || [];
   const walletPnl = state.wallet_pnl || {};
-
-  // Activity = P&L changed (from pm-trader SQLite, persistent across restarts)
-  const activeWallets = new Set();
-  Object.entries(walletPnl).forEach(([name, p]) => {
-    if (Math.abs((p.total_value || 500) - 500) > 0.05) activeWallets.add(name);
-  });
-
+  // Only show actionable trades (not SKIPPED/HISTORICAL from closed markets)
   const actionable = simTrades.filter(t => t.status === 'FILLED' || t.status === 'LIMIT_PLACED' || t.status === 'DRY_RUN');
   const skipped = simTrades.filter(t => t.status === 'SKIPPED' || t.status === 'HISTORICAL' || t.status === 'FAILED');
   const filtered = filterTime(actionable);
@@ -475,17 +459,13 @@ function render(state) {
   // Active wallet names (used by both P&L and trade cards)
   const activeNames = new Set(getActive().map(w => w.name));
 
-  // P&L Cards — only wallets with FILLED trades
+  // P&L Cards (only wallets in active list)
   const sortedPnl = Object.entries(walletPnl)
     .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
-    .filter(([name]) => activeWallets.has(name))
     .sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
-  const inactiveCount = Object.entries(walletPnl)
-    .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
-    .filter(([name]) => !activeWallets.has(name)).length;
   let pnlHtml = '';
   if (sortedPnl.length === 0) {
-    pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无活跃钱包 (' + inactiveCount + '个钱包无交易数据)</div>';
+    pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无盈亏数据</div>';
   } else {
     sortedPnl.forEach(([name,p],idx) => {
       const cls = p.pnl_pct > 0.5 ? 'win' : (p.pnl_pct < -0.5 ? 'loss' : 'neutral');
@@ -506,29 +486,35 @@ function render(state) {
   }
   document.getElementById('pnlGrid').innerHTML = pnlHtml;
 
-  // Trade cards — use same wallet list as P&L cards (activeNames + walletPnl)
-  const allWallets = Object.keys(walletPnl)
-    .filter(name => activeNames.size === 0 || activeNames.has(name))
-    .map(name => ({ name, cat: walletPnl[name]?.category || 'Unknown' }));
+  // Trade cards — use activeNames from above
+  const active = getActive();
+  const allWallets = active.map(w => ({
+    name: w.name,
+    cat: walletPnl[w.name]?.category || w.cat || 'Unknown'
+  }));
+  // Also include any server-only wallets not in local (won't happen after remove)
+  Object.keys(walletPnl).forEach(name => {
+    if (!activeNames.has(name)) {
+      allWallets.push({name, cat: walletPnl[name]?.category || 'Unknown'});
+    }
+  });
   const walletTrades = {};
   filtered.forEach(t => { const w = t.wallet||'?'; if(!walletTrades[w]) walletTrades[w]=[]; walletTrades[w].push(t); });
-
-  const activeW = allWallets.filter(w => activeWallets.has(w.name));
-  const inactiveW = allWallets.filter(w => !activeWallets.has(w.name));
-
-  function renderTradeCard(w) {
+  let tradeHtml = '';
+  allWallets.forEach(w => {
     const wt = (walletTrades[w.name]||[]).slice(-8).reverse();
     const np = walletPnl[w.name];
-    const metaStr = np ? '市值$'+np.total_value?.toFixed(0)+' '+(np.pnl_pct>=0?'+':'')+np.pnl_pct?.toFixed(1)+'%' : '';
-    let h = '<div class="trade-card">'
-      + '<div class="trade-card-header">'
-      + '<span class="trade-card-name">'+w.name+' <span style="color:var(--muted);font-weight:400;font-size:10px;">'+metaStr+'</span></span>'
-      + '<span style="display:flex;align-items:center;gap:8px;">'
-      + '<span class="cat-tag '+((w.cat||'Weather')[0].toLowerCase())+'">'+(CAT_NAMES[w.cat]||w.cat)+'</span>'
-      + '<button class="btn-xs remove" onclick="removeWalletMonitor(\x27'+w.name+'\x27)" title="停止跟单" style="font-size:9px;">✕</button>'
-      + '</span></div>'
-      + '<div class="trade-card-body">';
-    if (wt.length===0) h += '<div class="empty">等待新交易...<br><span style="font-size:9px;color:var(--muted)">监控自 '+(state.monitor_start||'启动')+'</span></div>';
+    const metaStr = np ? `市值$${np.total_value?.toFixed(0)||'?'} ${np.pnl_pct>=0?'+':''}${np.pnl_pct?.toFixed(1)||'?'}%` : '';
+    tradeHtml += `<div class="trade-card">
+      <div class="trade-card-header">
+        <span class="trade-card-name">${w.name} <span style="color:var(--muted);font-weight:400;font-size:10px;">${metaStr}</span></span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span class="cat-tag ${(w.cat||'Weather')[0].toLowerCase()}">${CAT_NAMES[w.cat]||w.cat}</span>
+          <button class="btn-xs remove" onclick="removeWalletMonitor('${w.name}')" title="停止跟单" style="font-size:9px;">✕</button>
+        </span>
+      </div>
+      <div class="trade-card-body">`;
+    if (wt.length===0) tradeHtml += `<div class="empty">等待新交易...<br><span style="font-size:9px;color:var(--muted)">监控自 ${state.monitor_start||'启动'}</span></div>`;
     else wt.forEach(t => {
       const st = t.status||''; let sl='',sc='status-hist';
       if (st==='FILLED'){sl='已成交';sc='status-placed'}
@@ -536,28 +522,18 @@ function render(state) {
       else if (st==='SKIPPED'){sl='已跳过';sc='status-skipped'}
       else if (st==='HISTORICAL'){sl='历史';sc='status-hist'}
       else if (st==='FAILED'){sl='失败';sc='status-failed'}
-      h += '<div class="trade-row">'
-        + '<span class="trade-side side-'+(t.side||'?')+'">'+(t.side==='BUY'?'买':'卖')+'</span>'
-        + '<span class="trade-qty">'+(t.size||0).toFixed(0)+'</span>'
-        + '<span class="trade-market">'+(t.slug||'').slice(0,35)+'</span>'
-        + '<span class="trade-usd">$'+(t.sim_usd||0).toFixed(2)+'</span>'
-        + '<span class="trade-slip '+((t.whale_slippage||0)<0.01?'green':'red')+'">'+(t.whale_slippage!=null?'$'+t.whale_slippage.toFixed(4):'—')+'</span>'
-        + '<span class="trade-status '+sc+'">'+sl+'</span>'
-        + '</div>';
+      tradeHtml += `<div class="trade-row">
+        <span class="trade-side side-${t.side||'?'}">${t.side==='BUY'?'买':'卖'}</span>
+        <span class="trade-qty">${(t.size||0).toFixed(0)}</span>
+        <span class="trade-market">${(t.slug||'').slice(0,35)}</span>
+        <span class="trade-usd">$${(t.sim_usd||0).toFixed(2)}</span>
+        <span class="trade-slip ${(t.whale_slippage||0)<0.01?"green":"red"}">${t.whale_slippage!=null?"$"+t.whale_slippage.toFixed(4):"—"}</span>
+        <span class="trade-status ${sc}">${sl}</span>
+      </div>`;
     });
-    h += '</div></div>';
-    return h;
-  }
-
-  document.getElementById('tradeGrid').innerHTML = activeW.map(w => renderTradeCard(w)).join('') || '<div class="empty">暂无活跃交易</div>';
-  if (inactiveW.length > 0) {
-    document.getElementById('inactiveTitle').style.display = '';
-    document.getElementById('inactiveCount').textContent = inactiveW.length;
-    document.getElementById('inactiveGrid').innerHTML = inactiveW.map(w => renderTradeCard(w)).join('');
-  } else {
-    document.getElementById('inactiveTitle').style.display = 'none';
-    document.getElementById('inactiveGrid').innerHTML = '';
-  }
+    tradeHtml += '</div></div>';
+  });
+  document.getElementById('tradeGrid').innerHTML = tradeHtml || '<div class="empty">添加钱包后开始监控</div>';
 }
 
 function showToast(msg) {
@@ -571,30 +547,7 @@ function showToast(msg) {
 function updateClock() { document.getElementById('clock').textContent = new Date().toLocaleString('zh-CN',{hour12:false}); }
 setInterval(updateClock,1000); updateClock();
 
-let refreshLock = false;
-async function refresh() {
-  if (refreshLock) return;  // skip if previous refresh still running
-  refreshLock = true;
-  try {
-    const state = await load();
-    if (state) {
-      const active = getActive();
-      const activeNames = new Set(active.map(w => w.name));
-      let synced = false;
-      Object.keys(state.wallet_pnl || {}).forEach(name => {
-        if (!activeNames.has(name)) {
-          const cw = CANDIDATE_WALLETS.find(c => c.name === name);
-          active.push({name, addr: cw ? cw.addr : '', cat: (state.wallet_pnl[name]||{}).category || (cw ? cw.cat : 'Unknown')});
-          synced = true;
-        }
-      });
-      if (synced) saveActive(active);
-      render(state);
-    }
-  } finally {
-    refreshLock = false;
-  }
-}
+async function refresh() { const state = await load(); if (state) render(state); }
 refresh(); setInterval(refresh, 5000);
 renderDiscoverTable();
 </script>

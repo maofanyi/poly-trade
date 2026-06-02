@@ -120,8 +120,21 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
             td = result['data']['trade']
             fill_price = td.get('avg_price', whale_price)
             fill_shares = td.get('shares', 0)
-            # Compute our own slippage: absolute price difference (USD per share)
-            fill_slippage = round(abs(fill_price - whale_price) if fill_price else 0, 6)
+
+            # Price sanity check: skip if fill deviates >30% from whale (stale/expired market)
+            price_gap_pct = abs(fill_price - whale_price) / whale_price * 100 if whale_price > 0 else 0
+            if price_gap_pct > 30:
+                log_trade(db, wallet_id,
+                          txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
+                          sim_usd=0, fill_price=fill_price, status='SKIPPED',
+                          slippage=round(price_gap_pct, 2), pnl_realized=0,
+                          slug=slug, outcome=outcome, timestamp=ts)
+                print(f"    {side} SKIP (price gap {price_gap_pct:.0f}%: whale={whale_price:.4f} fill={fill_price:.4f})")
+                processed += 1
+                continue
+
+            # Compute slippage: absolute price difference
+            fill_slippage = round(abs(fill_price - whale_price), 6)
 
             pnl_realized = 0.0
             if side == 'SELL':

@@ -399,6 +399,9 @@ function render(state) {
     }
   } else { document.getElementById('filterRange').textContent = ''; }
 
+  // Active wallet names (used by both P&L and trade cards)
+  const activeNames = new Set(getActive().map(w => w.name));
+
   // P&L Cards (only wallets in active list)
   const sortedPnl = Object.entries(walletPnl)
     .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
@@ -426,9 +429,8 @@ function render(state) {
   }
   document.getElementById('pnlGrid').innerHTML = pnlHtml;
 
-  // Trade cards — driven by LOCAL active list, augmented by server PnL data
+  // Trade cards — use activeNames from above
   const active = getActive();
-  const activeNames = new Set(active.map(w => w.name));
   const allWallets = active.map(w => ({
     name: w.name,
     cat: walletPnl[w.name]?.category || w.cat || 'Unknown'

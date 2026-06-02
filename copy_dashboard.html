@@ -561,7 +561,24 @@ function showToast(msg) {
 function updateClock() { document.getElementById('clock').textContent = new Date().toLocaleString('zh-CN',{hour12:false}); }
 setInterval(updateClock,1000); updateClock();
 
-async function refresh() { const state = await load(); if (state) render(state); }
+async function refresh() {
+  const state = await load();
+  if (state) {
+    // Auto-sync: add server wallets missing from browser localStorage
+    const active = getActive();
+    const activeNames = new Set(active.map(w => w.name));
+    let synced = false;
+    Object.keys(state.wallet_pnl || {}).forEach(name => {
+      if (!activeNames.has(name)) {
+        const cw = CANDIDATE_WALLETS.find(c => c.name === name);
+        active.push({name, addr: cw ? cw.addr : '', cat: (state.wallet_pnl[name]||{}).category || (cw ? cw.cat : 'Unknown')});
+        synced = true;
+      }
+    });
+    if (synced) saveActive(active);
+    render(state);
+  }
+}
 refresh(); setInterval(refresh, 5000);
 renderDiscoverTable();
 </script>

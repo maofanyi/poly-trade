@@ -132,11 +132,21 @@ const app = createApp({
       {name:'pol76',addr:'0x36e7e560c4d4cf32926906d939a18cf91f8a0b6b',cat:'Culture',winRate:'72.9%',profit:'—'},
     ]);
 
-    onMounted(() => { loadState(); connect(); });
+    // Wallet scores (dynamic, refreshed periodically)
+    const walletScores = ref([]);
+
+    async function loadScores() {
+      try {
+        const resp = await fetch(`${API}/wallets/scores`);
+        if (resp.ok) walletScores.value = await resp.json();
+      } catch (e) {}
+    }
+
+    onMounted(() => { loadState(); loadScores(); connect(); });
 
     function catLabel(c) { const m={Weather:'天气',Politics:'政治',Sports:'体育',Tech:'科技',Culture:'文化'}; return m[c]||c||'—'; }
 
-    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, catLabel, addWallet, removeWallet };
+    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, walletScores, catLabel, addWallet, removeWallet };
   }
 });
 

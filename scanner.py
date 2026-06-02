@@ -5,7 +5,8 @@ import urllib.request
 from datetime import datetime
 from config import DATA_API, INITIAL_CAPITAL, MAX_TRADES_PER_SCAN, SCAN_INTERVAL
 from database import get_db
-from trader import ensure_account, place_market_order
+import re
+from trader import ensure_account, place_market_order, has_position
 
 # Deferred import to avoid circular dependency
 _ws_manager = None
@@ -61,6 +62,26 @@ def snapshot_pnl(db, wallet_id: int, acct_name: str):
     """, (wallet_id, cash_val, total_val, pnl_val, pnl_pct))
     db.commit()
 
+def _extract_expiry(slug: str) -> int | None:
+    """Try to extract market expiry timestamp from slug. Returns Unix timestamp or None."""
+    # Pattern: ends with a 10-digit Unix timestamp (2020–2033 range)
+    m = re.search(r'[_-](\d{10})$', slug)
+    if m:
+        ts = int(m.group(1))
+        if 1577836800 < ts < 2000000000:  # 2020-01-01 to 2033-05-18
+            return ts
+    return None
+
+
+def _is_market_expiring(slug: str, min_seconds: int = 3600) -> bool:
+    """Check if market expires within min_seconds (default 1 hour)."""
+    expiry = _extract_expiry(slug)
+    if expiry is None:
+        return False  # Can't determine — allow trade
+    remaining = expiry - int(__import__('time').time())
+    return remaining < min_seconds
+
+
 def scan_wallet(db, wallet: dict, ms: int) -> int:
     """Scan one wallet for new trades. Returns count of new trades processed."""
     wallet_id = get_wallet_id(db, wallet['name'])
@@ -113,6 +134,29 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
 
         pre_bal = ensure_account(acct)
         trade_side = 'buy' if side == 'BUY' else 'sell'
+
+        # Position dedup: skip BUY if we already hold this market+outcome
+        if side == 'BUY' and has_position(acct, slug, outcome):
+            log_trade(db, wallet_id,
+                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
+                      sim_usd=0, fill_price=None, status='SKIPPED',
+                      slippage=0, pnl_realized=0,
+                      slug=slug, outcome=outcome, timestamp=ts)
+            print(f"    {side} SKIP (already holding {outcome} in {slug[:30]})")
+            processed += 1
+            continue
+
+        # Expiry check: skip markets expiring within 1 hour
+        if _is_market_expiring(slug, 3600):
+            log_trade(db, wallet_id,
+                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
+                      sim_usd=0, fill_price=None, status='SKIPPED',
+                      slippage=0, pnl_realized=0,
+                      slug=slug, outcome=outcome, timestamp=ts)
+            expiry_ts = _extract_expiry(slug)
+            print(f"    {side} SKIP (market expires soon, ts={expiry_ts})")
+            processed += 1
+            continue
 
         result = place_market_order(acct, slug, outcome, trade_side, sim_usd)
         post_bal = ensure_account(acct)

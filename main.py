@@ -41,6 +41,21 @@ async def lifespan(app: FastAPI):
         scanner_thread = threading.Thread(target=scan_loop, daemon=True)
         scanner_thread.start()
 
+    # Start wallet score refresher (runs every 30 min)
+    def score_refresh_loop():
+        import time as _time
+        from scores import refresh_all_scores
+        _time.sleep(30)  # Initial delay for server to stabilize
+        while True:
+            try:
+                print("Refreshing wallet scores...")
+                refresh_all_scores()
+            except Exception as e:
+                print(f"Score refresh error: {e}")
+            _time.sleep(1800)
+    score_thread = threading.Thread(target=score_refresh_loop, daemon=True)
+    score_thread.start()
+
     # Start heartbeat
     asyncio.create_task(ws_manager.heartbeat())
 

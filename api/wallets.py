@@ -134,3 +134,16 @@ def validate_wallet(data: dict):
         "trades_found": len(trades),
         "already_added": False
     }
+
+from scores import get_wallet_scores, refresh_all_scores
+
+@router.get("/scores")
+def list_scores():
+    """Get all wallet scores sorted by copy-trading potential."""
+    return get_wallet_scores()
+
+@router.post("/scores/refresh")
+def refresh_scores():
+    """Force-refresh all wallet scores from Polymarket Data API."""
+    updated = refresh_all_scores()
+    return {"ok": True, "updated": updated}

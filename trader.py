@@ -52,3 +52,27 @@ def close_position(acct: str, slug: str, outcome: str, shares: float) -> dict | 
     """Close a position by selling all shares."""
     cmd = f'{PM_TRADER} --account {acct} sell "{slug}" "{outcome}" {shares}'
     return pm(cmd)
+
+
+def get_portfolio(acct: str) -> list[dict]:
+    """Get all open positions for an account. Returns list of {slug, outcome, shares}."""
+    r = pm(f"{PM_TRADER} --account {acct} portfolio")
+    if not r or not r.get('ok') or not r.get('data'):
+        return []
+    positions = []
+    for pos in r['data']:
+        positions.append({
+            'slug': pos.get('market_slug', ''),
+            'outcome': pos.get('outcome', ''),
+            'shares': pos.get('shares', 0),
+        })
+    return positions
+
+
+def has_position(acct: str, slug: str, outcome: str) -> bool:
+    """Check if account already holds a position in this market+outcome."""
+    portfolio = get_portfolio(acct)
+    for pos in portfolio:
+        if pos['slug'] == slug and pos['outcome'].lower() == outcome.lower():
+            return True
+    return False

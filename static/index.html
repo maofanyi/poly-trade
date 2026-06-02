@@ -141,7 +141,7 @@ tbody tr:hover td { background: rgba(0,230,118,0.03); }
     <trade-list :trades="filteredTrades" :wallets="wallets" @remove="removeWallet"></trade-list>
   </div>
   <div v-show="activeTab==='wallets'">
-    <wallet-table :candidates="candidates" :active-names="activeNames" @add="addWallet" @remove="removeWallet"></wallet-table>
+    <wallet-table :candidates="candidates" :active-names="activeNames" :scores="walletScores" @add="addWallet" @remove="removeWallet"></wallet-table>
   </div>
   <div v-show="activeTab==='analytics'">
     <pnl-trend-chart :wallets="wallets"></pnl-trend-chart>

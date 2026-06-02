@@ -92,5 +92,15 @@ def init_db():
             sent_via TEXT DEFAULT 'toast',
             created_at TEXT DEFAULT (datetime('now','localtime'))
         );
+
+        CREATE TABLE IF NOT EXISTS wallet_scores (
+            wallet_id INTEGER PRIMARY KEY REFERENCES wallets(id),
+            trades INTEGER DEFAULT 0,
+            volume REAL DEFAULT 0,
+            markets INTEGER DEFAULT 0,
+            buy_pct REAL DEFAULT 0,
+            score REAL DEFAULT 0,
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+        );
     """)
     db.commit()

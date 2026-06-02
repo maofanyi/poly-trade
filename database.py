@@ -115,6 +115,14 @@ def init_db():
             updated_at TEXT DEFAULT (datetime('now','localtime'))
         );
 
+        CREATE TABLE IF NOT EXISTS price_history (
+            id INTEGER PRIMARY KEY,
+            slug TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            price REAL NOT NULL,
+            recorded_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
         CREATE TABLE IF NOT EXISTS closed_markets (
             slug TEXT PRIMARY KEY,
             detected_at TEXT DEFAULT (datetime('now','localtime'))

@@ -107,17 +107,58 @@ def health():
 
 @router.get("/market/{slug:path}/trades")
 def get_market_trades(slug: str, limit: int = 50):
-    """Get recent trades for a market (for price chart)."""
+    """Get price history for chart — local accumulated data + Data API recent trades."""
     import json as _json
-    url = f"https://data-api.polymarket.com/trades?slug={urllib.parse.quote(slug)}&limit={limit}"
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        trades = _json.loads(resp.read())
+    from datetime import datetime
+    seen = set()
     points = []
-    for t in (trades or []):
-        points.append({
-            "t": int(t.get("timestamp", 0)),
-            "p": float(t.get("price", 0)),
-            "o": t.get("outcome", ""),
-        })
+
+    # 1. Local price_history (accumulated since our first trade — days/weeks of data)
+    db = get_db()
+    local = db.execute("""
+        SELECT slug, outcome, price, recorded_at FROM price_history
+        WHERE slug = ? ORDER BY recorded_at ASC
+    """, (slug,)).fetchall()
+    for r in local:
+        try:
+            ts = int(datetime.fromisoformat(r['recorded_at']).timestamp())
+        except Exception:
+            continue
+        k = f'{ts}_{r[\"price\"]:.4f}'
+        if k in seen: continue
+        seen.add(k)
+        points.append({"t": ts, "p": round(r['price'], 4), "o": r['outcome']})
+
+    # 2. Our trade_log entries for this market (BUY/SELL execution prices)
+    trades = db.execute("""
+        SELECT whale_price as price, side, outcome, timestamp FROM trade_log
+        WHERE slug = ? AND status IN ('FILLED','SKIPPED') ORDER BY id ASC
+    """, (slug,)).fetchall()
+    for t in trades:
+        try:
+            ts = int(datetime.fromisoformat(t['timestamp']).timestamp())
+        except Exception:
+            continue
+        k = f'{ts}_{t[\"price\"]:.4f}'
+        if k in seen: continue
+        seen.add(k)
+        points.append({"t": ts, "p": round(float(t['price']), 4), "o": t['outcome'] or 'Yes'})
+
+    # 3. Data API recent trades (latest ~50 trades for freshness)
+    try:
+        for offset in [0, 50]:
+            url = f"https://data-api.polymarket.com/trades?slug={urllib.parse.quote(slug)}&limit=50&offset={offset}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                api_trades = _json.loads(resp.read())
+            for t in (api_trades or []):
+                ts = int(t.get('timestamp', 0))
+                k = f'{ts}_{float(t.get(\"price\",0)):.4f}'
+                if k in seen: continue
+                seen.add(k)
+                points.append({"t": ts, "p": float(t.get('price', 0)), "o": t.get('outcome', '')})
+    except Exception:
+        pass
+
+    points.sort(key=lambda x: x['t'])
     return {"slug": slug, "points": points}

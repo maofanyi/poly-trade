@@ -133,6 +133,20 @@ def snapshot_pnl(db, wallet_id: int, acct_name: str):
     """, (wallet_id, cash_val, total_val, pnl_val, pnl_pct))
     db.commit()
 
+    # Record price history for charting (from our entry point onwards)
+    from trader import get_portfolio, get_midpoint
+    positions = get_portfolio(acct_name) or []
+    for pos in positions:
+        slug = pos.get('slug', '')
+        outcome = pos.get('outcome', '')
+        mid = get_midpoint(slug)
+        if mid:
+            for k, v in mid.items():
+                if v is not None and k.lower() == outcome.lower():
+                    db.execute("INSERT INTO price_history (slug, outcome, price) VALUES (?,?,?)",
+                               (slug, outcome, round(v, 6)))
+    db.commit()
+
     # Auto-pause if loss exceeds 25%
     if pnl_pct <= -25:
         db.execute("UPDATE wallets SET paused = 1 WHERE id = ?", (wallet_id,))

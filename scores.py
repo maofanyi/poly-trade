@@ -85,16 +85,34 @@ def discover_wallets(max_discover: int = 10) -> list[dict]:
     for row in db.execute("SELECT address FROM discovered_wallets").fetchall():
         known.add(row['address'].lower())
 
-    # Get active market slugs from monitored wallets' recent trades
+    # Get active market slugs from monitored + candidate wallets' recent trades
     market_slugs = set()
-    active_wallets = db.execute("SELECT address FROM wallets WHERE active = 1").fetchall()
-    for w in active_wallets:
+    all_addresses = set()
+    for row in db.execute("SELECT address FROM wallets WHERE active = 1").fetchall():
+        all_addresses.add(row['address'])
+    # Also include known candidate addresses (from hardcoded list)
+    candidate_addrs = [
+        '0x40471b34671887546013ceb58740625c2efe7293',  # Frank0951
+        '0xbacd00c9080a82ded56f504ee8810af732b0ab35',  # ScottyNooo
+        '0x2110ba2a1e18840109482ff4ddc547baeff45850',  # GeorgeSmiley
+        '0xd5b97d08ec6098407bfbf66c2786ccc9967fe44e',  # Optimus
+        '0x6c743aafd813475986dcd930f380a1f50901bd4e',  # middleoftheocean
+        '0x92672c80d36dcd08172aa1e51dface0f20b70f9a',  # CKW
+        '0x8e0b7ae246205b1ddf79172148a58a3204139e5c',  # synnet
+    ]
+    for addr in candidate_addrs:
+        all_addresses.add(addr)
+
+    for addr in list(all_addresses)[:12]:  # Sample up to 12 wallets
         try:
-            trades = _fetch(f"{DATA_API}/trades?user={w['address']}&limit=10")
+            trades = _fetch(f"{DATA_API}/trades?user={addr}&limit=20")
             time.sleep(0.2)
-            for t in (trades or [])[:3]:
+            for t in (trades or [])[:8]:  # Take up to 8 slugs per wallet
                 slug = t.get('slug', '')
-                if slug:
+                ts = int(t.get('timestamp', 0))
+                # Only recent markets (last 24 hours)
+                now_ts = int(time.time())
+                if slug and (now_ts - ts) < 86400:
                     market_slugs.add(slug)
         except Exception:
             continue
@@ -109,7 +127,7 @@ def discover_wallets(max_discover: int = 10) -> list[dict]:
     candidates = {}  # address -> {trade_count, total_vol}
     for slug in list(market_slugs)[:8]:  # Limit to 8 markets
         try:
-            market_trades = _fetch(f"{DATA_API}/trades?market={slug}&limit=30")
+            market_trades = _fetch(f"{DATA_API}/trades?slug={slug}&limit=40")
             time.sleep(0.3)
             for t in (market_trades or []):
                 addr = (t.get('user') or t.get('maker') or '').lower()

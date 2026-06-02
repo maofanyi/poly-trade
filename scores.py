@@ -153,23 +153,24 @@ def discover_wallets(max_discover: int = 10) -> list[dict]:
     for addr in list(candidates.keys())[:30]:  # Score at most 30
         result = score_wallet(addr)
         if result and result['score'] > 30:
-            # Try to determine category from trade titles
+            # Get profile info (name + category) from trade sample
+            display_name = None
             cat = "General"
             try:
                 sample = _fetch(f"{DATA_API}/trades?user={addr}&limit=3")
-                titles = ' '.join(t.get('title', '') for t in (sample or [])).lower()
-                if any(w in titles for w in ['temperature', 'weather', 'rain', 'snow', 'storm']):
-                    cat = 'Weather'
-                elif any(w in titles for w in ['election', 'trump', 'senate', 'president', 'political']):
-                    cat = 'Politics'
-                elif any(w in titles for w in ['nba', 'nfl', 'mlb', 'ufc', 'soccer', 'tennis']):
-                    cat = 'Sports'
                 time.sleep(0.2)
+                if sample:
+                    display_name = sample[0].get('name', '').strip()
+                    titles = ' '.join(t.get('title', '') for t in sample).lower()
+                    if any(w in titles for w in ['temperature', 'weather', 'rain', 'snow', 'storm']):
+                        cat = 'Weather'
+                    elif any(w in titles for w in ['election', 'trump', 'senate', 'president', 'political']):
+                        cat = 'Politics'
+                    elif any(w in titles for w in ['nba', 'nfl', 'mlb', 'ufc', 'soccer', 'tennis']):
+                        cat = 'Sports'
             except Exception:
                 pass
-
-            # Generate name
-            short_name = f"发现-{addr[:6]}"
+            short_name = display_name if display_name else f"发现-{addr[:6]}"
 
             scored.append({
                 'address': addr,

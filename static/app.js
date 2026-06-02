@@ -12,6 +12,7 @@ import ToastContainer from './components/ToastContainer.js';
 import BacktestPanel from './components/BacktestPanel.js';
 import PortfolioPanel from './components/PortfolioPanel.js';
 import TradeDetailModal from './components/TradeDetailModal.js';
+import WalletCompareChart from './components/WalletCompareChart.js';
 
 const API = '/api';
 
@@ -169,12 +170,15 @@ const app = createApp({
       } catch(e) { console.error(e); }
     }
 
-    onMounted(() => { loadState(); loadScores(); loadPortfolio(); connect(); });
+    const pnlSegments = ref({ today:0, week:0, month:0 });
+    async function loadSegments(){ try{ const r=await fetch('/api/summary/segments'); if(r.ok) pnlSegments.value=await r.json(); }catch(e){} }
+
+    onMounted(() => { loadState(); loadScores(); loadPortfolio(); loadSegments(); connect(); });
 
     function catLabel(c) { const m={Weather:'天气',Politics:'政治',Sports:'体育',Tech:'科技',Culture:'文化'}; return m[c]||c||'—'; }
     function showDetail(trade, cat){ detailTrade.value = trade; detailWalletCat.value = cat||''; }
 
-    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, walletScores, portfolioData, catLabel, addWallet, removeWallet, cleanupPositions, resetDefaults, detailTrade, detailWalletCat, showDetail };
+    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, walletScores, portfolioData, pnlSegments, catLabel, addWallet, removeWallet, cleanupPositions, resetDefaults, detailTrade, detailWalletCat, showDetail };
   }
 });
 
@@ -190,5 +194,6 @@ app.component('ToastContainer', ToastContainer);
 app.component('BacktestPanel', BacktestPanel);
 app.component('PortfolioPanel', PortfolioPanel);
 app.component('TradeDetailModal', TradeDetailModal);
+app.component('WalletCompareChart', WalletCompareChart);
 
 app.mount('#app');

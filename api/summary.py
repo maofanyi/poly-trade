@@ -48,3 +48,54 @@ def get_summary():
         "total_trades": total_trades,
         "win_rate": win_rate
     }
+
+@router.get("/summary/segments")
+def get_pnl_segments():
+    """P&L breakdown: today / this week / this month."""
+    db = get_db()
+    wallets = db.execute("SELECT id FROM wallets WHERE active = 1").fetchall()
+    wallet_ids = [w['id'] for w in wallets]
+    if not wallet_ids:
+        return {"today": 0, "week": 0, "month": 0}
+    placeholders = ','.join('?' for _ in wallet_ids)
+
+    def segment_since(since_expr):
+        rows = db.execute(f"""
+            SELECT wallet_id, MIN(total_value) as first_val, MAX(total_value) as last_val FROM (
+                SELECT wallet_id, total_value,
+                       ROW_NUMBER() OVER (PARTITION BY wallet_id ORDER BY id ASC) as rn_asc,
+                       ROW_NUMBER() OVER (PARTITION BY wallet_id ORDER BY id DESC) as rn_desc
+                FROM pnl_snapshots
+                WHERE wallet_id IN ({placeholders}) AND timestamp >= {since_expr}
+            ) WHERE rn_asc = 1 OR rn_desc = 1
+            GROUP BY wallet_id
+        """, wallet_ids).fetchall()
+        pnl = 0.0
+        for r in rows:
+            if r['first_val'] and r['last_val']:
+                pnl += r['last_val'] - r['first_val']
+        return round(pnl, 2)
+
+    return {
+        "today": segment_since("datetime('now','localtime','start of day')"),
+        "week": segment_since("datetime('now','localtime','weekday 0','-7 days')"),
+        "month": segment_since("datetime('now','localtime','start of month')"),
+    }
+
+@router.get("/summary/compare")
+def get_wallet_compare():
+    """P&L history for all active wallets (for comparison chart)."""
+    db = get_db()
+    wallets = db.execute("SELECT id, name FROM wallets WHERE active = 1 ORDER BY name").fetchall()
+    series = []
+    for w in wallets:
+        rows = db.execute("""
+            SELECT pnl_pct, timestamp FROM pnl_snapshots
+            WHERE wallet_id = ? ORDER BY timestamp ASC
+        """, (w['id'],)).fetchall()
+        if rows:
+            series.append({
+                "name": w['name'],
+                "points": [{"t": r['timestamp'][:16], "v": r['pnl_pct']} for r in rows]
+            })
+    return series

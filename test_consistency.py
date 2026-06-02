@@ -74,7 +74,7 @@ with sync_playwright() as p:
 
     # Final check: read state directly
     import urllib.request
-    raw = urllib.request.urlopen("http://localhost:8766/copy_trader_state.json").read().decode('utf-8')
+    raw = urllib.request.urlopen("http://localhost:8766/api/state").read().decode('utf-8')
     state = json.loads(raw)
     filled_wallets = set()
     for t in state.get('sim_trades', []):

@@ -127,9 +127,12 @@ def run_backtest(address: str, days: int = 30) -> dict:
                 evt_resp = _fetch(f"https://gamma-api.polymarket.com/events?slug={slug}")
                 time.sleep(0.3)
                 if evt_resp and len(evt_resp) > 0:
-                    markets_raw = evt_resp[0].get('markets', '[]')
+                    markets_raw = evt_resp[0].get('markets', [])
                     if isinstance(markets_raw, str):
-                        markets_raw = json.loads(markets_raw)
+                        try:
+                            markets_raw = json.loads(markets_raw)
+                        except json.JSONDecodeError:
+                            markets_raw = []
                     for m in markets_raw:
                         m_slug = m.get('slug', '')
                         if m_slug == slug or m_slug in slug:

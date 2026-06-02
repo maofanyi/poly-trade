@@ -120,6 +120,25 @@ tbody tr:hover td { background: rgba(0,230,118,0.03); }
   .pnl-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
   .trade-grid { grid-template-columns: 1fr; }
 }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding-top: 40px; overflow-y: auto; }
+.modal-panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; width: 540px; max-width: 95vw; margin-bottom: 40px; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.modal-title { font-weight: 700; font-size: 14px; }
+.modal-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px 8px; }
+.modal-close:hover { color: var(--text); }
+.modal-section { padding: 0 18px; margin: 14px 0; }
+.modal-section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+.modal-card { background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.modal-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.modal-market-title { font-size: 13px; font-weight: 600; line-height: 1.5; margin-bottom: 6px; word-break: break-all; }
+.modal-resolution { font-size: 11px; color: var(--amber); margin-top: 4px; }
+.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.modal-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
+.modal-row .label { color: var(--muted); font-size: 11px; }
+.modal-row .value, .modal-grid .value { text-align: right; font-size: 12px; }
+.modal-grid .label { color: var(--muted); font-size: 10px; display: block; margin-bottom: 2px; }
+.modal-grid .value { font-size: 13px; font-weight: 600; }
+@media(max-width:560px){ .modal-panel { width: 100%; border-radius: 0; } .modal-grid { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
 <body>
@@ -146,7 +165,7 @@ tbody tr:hover td { background: rgba(0,230,118,0.03); }
       </div>
     </div>
     <div class="section-title">📋 交易明细 ({{ filteredTrades.length }} 笔)</div>
-    <trade-list :trades="filteredTrades" :wallets="wallets" @remove="removeWallet"></trade-list>
+    <trade-list :trades="filteredTrades" :wallets="wallets" @remove="removeWallet" @detail="(trade,cat)=>showDetail(trade,cat)"></trade-list>
   </div>
   <div v-show="activeTab==='wallets'">
     <wallet-table :candidates="candidates" :active-names="activeNames" :scores="walletScores" @add="addWallet" @remove="removeWallet"></wallet-table>
@@ -162,6 +181,7 @@ tbody tr:hover td { background: rgba(0,230,118,0.03); }
     <backtest-panel></backtest-panel>
   </div>
   <toast-container :alerts="alerts"></toast-container>
+  <trade-detail-modal v-if="detailTrade" :trade="detailTrade" :wallet-cat="detailWalletCat" @close="detailTrade=null"></trade-detail-modal>
   <div class="status-footer">数据源: SQLite · WebSocket 实时推送</div>
 </div>
 <script type="module" src="app.js"></script>

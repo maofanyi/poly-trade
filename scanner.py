@@ -7,6 +7,13 @@ from config import DATA_API, INITIAL_CAPITAL, MAX_TRADES_PER_SCAN, SCAN_INTERVAL
 from database import get_db
 from trader import ensure_account, place_market_order
 
+# Deferred import to avoid circular dependency
+_ws_manager = None
+
+def set_ws_manager(mgr):
+    global _ws_manager
+    _ws_manager = mgr
+
 def api_fetch(url: str) -> list:
     """Fetch JSON from Polymarket Data API."""
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -174,5 +181,24 @@ def scan_loop():
         db.commit()
 
         print(f"  Scan done in {elapsed:.1f}s | New trades: {total_new}")
+
+        # Broadcast P&L update via WebSocket
+        if _ws_manager:
+            pnl_data = []
+            for w_row in wallets:
+                pnl_row = db.execute(
+                    "SELECT * FROM pnl_snapshots WHERE wallet_id=? ORDER BY id DESC LIMIT 1",
+                    (w_row["id"],)
+                ).fetchone()
+                if pnl_row:
+                    pnl_data.append({"name": w_row["name"], "wallet_id": w_row["id"],
+                                     "cash": pnl_row["cash"], "total_value": pnl_row["total_value"],
+                                     "pnl": pnl_row["pnl"], "pnl_pct": pnl_row["pnl_pct"]})
+            try:
+                import asyncio as _asyncio
+                _asyncio.run(_ws_manager.broadcast({"type": "pnl_update", "wallets": pnl_data}))
+            except Exception:
+                pass
+
         print(f"  Next scan in {SCAN_INTERVAL}s...")
         time.sleep(SCAN_INTERVAL)

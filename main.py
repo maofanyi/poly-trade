@@ -1,0 +1,76 @@
+"""FastAPI application entry point."""
+import asyncio
+import os
+import threading
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
+from database import init_db, get_db
+from websocket import ws_manager
+from scanner import scan_loop, set_ws_manager
+from api.wallets import router as wallets_router
+from api.trades import router as trades_router
+from api.state import router as state_router
+from api.summary import router as summary_router
+from config import STATIC_DIR
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown lifecycle."""
+    init_db()
+    # Seed defaults
+    db = get_db()
+    if db.execute("SELECT COUNT(*) FROM wallets").fetchone()[0] == 0:
+        from config import DEFAULT_WALLETS
+        for w in DEFAULT_WALLETS:
+            db.execute(
+                "INSERT OR IGNORE INTO wallets (address, name, category) VALUES (?, ?, ?)",
+                (w["address"], w["name"], w["category"])
+            )
+        db.commit()
+        print(f"Seeded {len(DEFAULT_WALLETS)} default wallets")
+    # Ensure alert_config row exists
+    db.execute("INSERT OR IGNORE INTO alert_config (id) VALUES (1)")
+    db.commit()
+
+    # Wire WebSocket manager into scanner
+    set_ws_manager(ws_manager)
+
+    # Start scanner (skip in test mode)
+    if os.environ.get("SCAN_ENABLED", "1") != "0":
+        scanner_thread = threading.Thread(target=scan_loop, daemon=True)
+        scanner_thread.start()
+
+    # Start heartbeat
+    asyncio.create_task(ws_manager.heartbeat())
+
+    yield
+    print("Shutting down...")
+
+app = FastAPI(title="Polymarket Copy Trader", lifespan=lifespan)
+
+# Mount API routers
+app.include_router(wallets_router)
+app.include_router(trades_router)
+app.include_router(state_router)
+app.include_router(summary_router)
+
+# WebSocket endpoint
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await ws_manager.connect(ws)
+    try:
+        while True:
+            data = await ws.receive_text()
+            if data == 'pong':
+                pass
+    except WebSocketDisconnect:
+        ws_manager.disconnect(ws)
+
+# Serve static files (Vue dashboard)
+if os.path.exists(STATIC_DIR):
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8766, reload=True)

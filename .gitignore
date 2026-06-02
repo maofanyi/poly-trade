@@ -19,4 +19,7 @@ test_yf.json
 tradingagents_input_2026-06-01.json
 .claude/
 nohup.out
-data/trade.db-shm\ndata/trade.db-wal
+data/*.db-shm
+data/*.db-wal
+*.db-shm
+*.db-wal

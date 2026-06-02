@@ -92,6 +92,7 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
 
     acct = f"copy-{wallet['name']}"
     processed = 0
+    filled_count = 0
 
     for tr in new_trades:
         side = tr.get('side', 'BUY').upper()
@@ -147,6 +148,7 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
                       slippage=fill_slippage, pnl_realized=pnl_realized,
                       slug=slug, outcome=outcome, timestamp=ts)
             print(f"    {side} ${sim_usd:.2f} FILLED @ {fill_price} (whale={whale_price})")
+            filled_count += 1
         else:
             err = str(result.get('error', '')) if result else 'no response'
             status = 'SKIPPED' if ('not found' in err.lower() or 'MARKET_NOT_FOUND' in err) else 'FAILED'
@@ -159,7 +161,7 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
 
         processed += 1
 
-    if new_trades:
+    if filled_count > 0:
         snapshot_pnl(db, wallet_id, acct)
 
     return processed

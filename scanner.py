@@ -6,7 +6,7 @@ from datetime import datetime
 from config import DATA_API, INITIAL_CAPITAL, MAX_TRADES_PER_SCAN, SCAN_INTERVAL
 from database import get_db
 import re
-from trader import ensure_account, place_market_order, has_position
+from trader import ensure_account, place_market_order, has_position, get_portfolio
 
 # Deferred import to avoid circular dependency
 _ws_manager = None
@@ -49,11 +49,82 @@ def get_cost_basis(db, wallet_id: int, slug: str) -> tuple[float, float]:
         return (row['fill_price'], row['size'] or 0)
     return (0, 0)
 
+def _resolve_expired_positions(acct_name: str) -> float:
+    """Query Gamma API to resolve expired positions. Returns adjustment to total_value."""
+    import json as _json
+    from trader import get_portfolio
+    positions = get_portfolio(acct_name)
+    if not positions:
+        return 0.0
+
+    now_ts = int(time.time())
+    adjustment = 0.0
+
+    for pos in positions:
+        slug = pos.get('slug', '')
+        outcome = pos.get('outcome', '')
+        shares = pos.get('shares', 0)
+        if not slug or shares <= 0:
+            continue
+
+        # Check if market has expired
+        expiry = _extract_expiry(slug)
+        if not expiry or (now_ts - expiry) <= 3600:
+            continue
+
+        # Query Gamma API for resolution
+        try:
+            url = f"https://gamma-api.polymarket.com/events?slug={slug}"
+            req = __import__('urllib.request').Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with __import__('urllib.request').urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            if not data:
+                continue
+            markets_raw = data[0].get('markets', [])
+            if isinstance(markets_raw, str):
+                try: markets_raw = _json.loads(markets_raw)
+                except: continue
+            for m in markets_raw:
+                outcomes = m.get('outcomes', [])
+                prices = m.get('outcomePrices', [])
+                if isinstance(outcomes, str):
+                    try: outcomes = _json.loads(outcomes)
+                    except: outcomes = []
+                if isinstance(prices, str):
+                    try: prices = _json.loads(prices)
+                    except: prices = []
+                winner = None
+                for o, p in zip(outcomes, prices):
+                    try: pf = float(p)
+                    except: pf = 0
+                    if pf >= 0.99:
+                        winner = o
+                        break
+                if winner and outcome.lower() == winner.lower():
+                    adjustment += shares * 1.0  # Won: each share worth $1
+                    print(f"    ✓ {slug[:30]} {outcome} resolved WIN +${shares:.2f}")
+                else:
+                    print(f"    ✗ {slug[:30]} {outcome} resolved LOSE ({winner} won)")
+                break
+        except Exception as e:
+            print(f"    ? {slug[:30]} resolution error: {e}")
+            continue
+
+    return round(adjustment, 2)
+
+
 def snapshot_pnl(db, wallet_id: int, acct_name: str):
-    """Take a P&L snapshot for one wallet."""
+    """Take a P&L snapshot for one wallet, including resolved positions."""
     bal = ensure_account(acct_name)
-    total_val = round(bal['total_value'], 2)
     cash_val = round(bal['cash'], 2)
+    pm_total = round(bal['total_value'], 2)
+
+    # Resolve expired positions using Gamma API
+    resolution_adjustment = _resolve_expired_positions(acct_name)
+
+    # Total value = pm-trader value + resolved position adjustments
+    # (pm-trader may show stale prices for expired markets; we fix that)
+    total_val = round(pm_total + resolution_adjustment, 2)
     pnl_val = round(total_val - INITIAL_CAPITAL, 2)
     pnl_pct = round(pnl_val / INITIAL_CAPITAL * 100, 2)
     db.execute("""

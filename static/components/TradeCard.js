@@ -9,7 +9,7 @@ export default {
       </span>
     </div>
     <div class="trade-card-body">
-      <div v-for="p in positions" :key="'p'+p.slug+p.outcome">
+      <div v-for="p in activePositions" :key="'p'+p.slug+p.outcome">
         <div class="position-row" @click="$emit('detail', posToTrade(p), walletCat)" style="cursor:pointer;" :title="p.slug">
           <span class="pos-side hold">持仓</span>
           <span class="pos-qty">{{ p.shares.toFixed(0) }}</span>
@@ -17,6 +17,16 @@ export default {
           <span class="pos-pnl" :class="(p.unrealized_pnl||0)>=0?'green':'red'">{{ (p.unrealized_pnl||0)>=0?'+':'' }}\${{ (p.unrealized_pnl||0).toFixed(2) }}</span>
           <span class="pos-price muted">@\${{ (p.live_price||p.cost_basis||0).toFixed(4) }}</span>
           <span class="pos-value muted">\${{ (p.value||0).toFixed(2) }}</span>
+        </div>
+      </div>
+      <div v-for="p in expiredPositions" :key="'ep'+p.slug+p.outcome">
+        <div class="position-row expired" :title="p.slug">
+          <span class="pos-side hold" style="background:rgba(255,171,0,0.1);color:var(--amber);">已过期</span>
+          <span class="pos-qty">{{ p.shares.toFixed(0) }}</span>
+          <span class="pos-market">{{ (p.slug||'').slice(0,30) }}</span>
+          <span class="pos-pnl muted">—</span>
+          <span class="pos-price muted">@\${{ (p.cost_basis||0).toFixed(4) }}</span>
+          <span class="pos-value muted">成本\${{ (p.shares*(p.cost_basis||0)).toFixed(2) }}</span>
         </div>
       </div>
       <div v-for="t in trades" :key="t.id">
@@ -37,9 +47,11 @@ export default {
   async mounted(){ await this.loadPositions(); },
   computed: {
     catClass(){ const m={Weather:'w',Politics:'p',Sports:'s',Tech:'t',Culture:'c'}; return m[this.walletCat]||'w'; },
-    totalPosValue(){ return this.positions.reduce((s,p)=>s+(p.value||0),0).toFixed(0); },
-    totalUPL(){ return this.positions.reduce((s,p)=>s+(p.unrealized_pnl||0),0); },
-    totalPnLTitle(){ return this.positions.length+'个持仓 · 浮动盈亏'+(this.totalUPL>=0?'+':'')+'\$'+this.totalUPL.toFixed(2); }
+    activePositions(){ return this.positions.filter(p=>p.active); },
+    expiredPositions(){ return this.positions.filter(p=>!p.active); },
+    totalPosValue(){ return this.activePositions.reduce((s,p)=>s+(p.value||0),0).toFixed(0); },
+    totalUPL(){ return this.activePositions.reduce((s,p)=>s+(p.unrealized_pnl||0),0); },
+    totalPnLTitle(){ const n=this.activePositions.length; return n+'个活跃持仓 · 浮动盈亏'+(this.totalUPL>=0?'+':'')+'\$'+this.totalUPL.toFixed(2)+(this.expiredPositions.length?' +'+this.expiredPositions.length+'个已过期':''); }
   },
   methods: {
     async loadPositions(){

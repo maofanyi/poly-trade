@@ -194,14 +194,18 @@ def get_wallet_positions(wallet_id: int):
         live_price = None
         if mid:
             for k, v in mid.items():
-                if k.lower() == outcome.lower():
+                if k.lower() == outcome.lower() and v is not None:
                     live_price = v
                     break
-        unrealized = round((live_price - cost_basis) * shares, 4) if live_price and cost_basis else None
+        # Skip positions on expired/unfindable markets (no live price and no cost basis)
+        if live_price is None and cost_basis == 0:
+            continue
+        unrealized = round((live_price - cost_basis) * shares, 4) if live_price is not None and cost_basis else None
         result.append({"slug":slug,"outcome":outcome,"shares":round(shares,4),
                        "cost_basis":cost_basis,"live_price":live_price,
                        "unrealized_pnl":unrealized,
-                       "value":round(shares*(live_price or cost_basis or 0),2)})
+                       "value":round(shares*(live_price or cost_basis or 0),2),
+                       "active":live_price is not None})
     return result
 
 from scores import get_wallet_scores, refresh_all_scores

@@ -553,6 +553,34 @@ function updateClock() { document.getElementById('clock').textContent = new Date
 setInterval(updateClock,1000); updateClock();
 
 async function refresh() { const state = await load(); if (state) render(state); }
+
+// Auto-sync: add server wallets to localStorage if missing
+function autoSyncFromServer(walletPnl) {
+  const active = getActive();
+  const activeNames = new Set(active.map(w => w.name));
+  let changed = false;
+  Object.keys(walletPnl || {}).forEach(name => {
+    if (!activeNames.has(name)) {
+      const cw = CANDIDATE_WALLETS.find(c => c.name === name);
+      active.push({name, addr: cw?.addr || '', cat: walletPnl[name]?.category || cw?.cat || 'Unknown'});
+      changed = true;
+    }
+  });
+  if (changed) saveActive(active);
+}
+
+const _origRefresh = refresh;
+refresh = async function() {
+  const state = await load();
+  if (state && state.wallet_pnl) autoSyncFromServer(state.wallet_pnl);
+  return _origRefresh();
+};
+
+if (location.search.includes('reset')) {
+  localStorage.removeItem(STORAGE_KEY);
+  location.replace(location.pathname);
+}
+
 refresh(); setInterval(refresh, 5000);
 renderDiscoverTable();
 </script>

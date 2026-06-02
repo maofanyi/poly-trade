@@ -443,10 +443,13 @@ if __name__ == '__main__':
     _sys.stderr.write(f"  Monitor start: {datetime.fromtimestamp(copy_trader.MONITOR_START).strftime('%Y-%m-%d %H:%M:%S')}\n")
     _sys.stderr.write(f"  Only new trades from now. Historical data ignored.\n\n")
 
+    old_state = load_state()
+    realized_init = old_state.get('realized_pnl', {})
+
     state = {"seen_txns": [], "sim_trades": [], "wallet_pnl": {}, "last_scan": None,
              "monitor_start": datetime.fromtimestamp(copy_trader.MONITOR_START).strftime('%Y-%m-%d %H:%M:%S')}
-    state['wallet_pnl'] = get_all_pnl(realized_pnl)
-    state['realized_pnl'] = dict(realized_pnl)
+    state['wallet_pnl'] = get_all_pnl(realized_init)
+    state['realized_pnl'] = dict(realized_init)
     state['last_scan'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     save_state(state)
 

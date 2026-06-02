@@ -29,12 +29,14 @@ def score_wallet(address: str) -> dict | None:
     unique_markets = len(set(t.get('conditionId', '') for t in trades))
     total_vol = sum(float(t.get('size', 0)) * float(t.get('price', 0.5)) for t in trades)
 
-    freq_score = min(n, 50) / 50 * 30
-    div_score = min(unique_markets, 20) / 20 * 25
-    vol_score = min(total_vol / 5000, 1) * 25
+    # Score formula: weighted sum of diversity, volume, and consistency
+    market_score = min(unique_markets / 30, 1) * 35      # Diverse = more market knowledge
+    volume_score = min(total_vol / 20000, 1) * 25        # High volume = conviction
+    size_score = min((total_vol / max(n, 1)) / 200, 1) * 20  # Larger avg trade = not a bot
     buy_pct = buy_count / n if n > 0 else 0
-    balance_penalty = 1.0 - abs(buy_pct - 0.5) * 0.5
-    score = round((freq_score + div_score + vol_score) * balance_penalty, 1)
+    balance_penalty = 1.0 - abs(buy_pct - 0.5) * 0.3     # Balanced = not directional bias
+    consistency_score = min(n / 50, 1) * 20                # More trades in sample = consistent
+    score = round((market_score + volume_score + size_score + consistency_score) * balance_penalty, 1)
 
     return {
         "trades": n,

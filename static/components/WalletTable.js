@@ -38,11 +38,23 @@ export default {
     addrInput:'', validating:false, validResult:null
   }; },
   computed: {
-    scoreMap(){ const m={}; for(const s of this.scores){ m[s.address]=s; if(!this.candidates.find(c=>c.addr===s.address)&&!m[s.address]){} } return m; },
+    scoreMap(){
+      const m={};
+      // Build map by lowercase address for case-insensitive matching
+      for(const s of this.scores){
+        if(s.address) m[s.address.toLowerCase()] = s;
+      }
+      return m;
+    },
     enriched(){
       return this.candidates.map(w => {
-        const s = this.scoreMap[w.addr];
-        return s ? { ...w, scoreObj: s, winRate: s.score, profit: s.trades+'筆' } : w;
+        const key = (w.addr||'').toLowerCase();
+        const s = this.scoreMap[key];
+        if(s && s.score > 0){
+          const volStr = s.volume >= 1000 ? '$'+(s.volume/1000).toFixed(0)+'K' : '$'+s.volume.toFixed(0);
+          return { ...w, scoreObj: s, winRate: s.score, profit: volStr + ' · ' + s.trades + '筆', _score: s.score, _trades: s.trades };
+        }
+        return { ...w, winRate: '—', profit: '—' };
       });
     },
     filtered(){

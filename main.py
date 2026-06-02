@@ -13,6 +13,7 @@ from api.trades import router as trades_router
 from api.state import router as state_router
 from api.summary import router as summary_router
 from api.backtest import router as backtest_router
+from api.portfolio import router as portfolio_router
 from config import STATIC_DIR
 
 @asynccontextmanager
@@ -78,6 +79,7 @@ app.include_router(trades_router)
 app.include_router(state_router)
 app.include_router(summary_router)
 app.include_router(backtest_router)
+app.include_router(portfolio_router)
 
 # WebSocket endpoint
 @app.websocket("/ws")

@@ -415,7 +415,11 @@ function render(state) {
   stateCache = state;
   const simTrades = state.sim_trades || [];
   const walletPnl = state.wallet_pnl || {};
-  // Only show actionable trades (not SKIPPED/HISTORICAL from closed markets)
+
+  // Single source of truth: wallet is active if it has ≥1 FILLED trade
+  const activeWallets = new Set();
+  simTrades.forEach(t => { if (t.wallet && t.status === 'FILLED') activeWallets.add(t.wallet); });
+
   const actionable = simTrades.filter(t => t.status === 'FILLED' || t.status === 'LIMIT_PLACED' || t.status === 'DRY_RUN');
   const skipped = simTrades.filter(t => t.status === 'SKIPPED' || t.status === 'HISTORICAL' || t.status === 'FAILED');
   const filtered = filterTime(actionable);
@@ -461,17 +465,14 @@ function render(state) {
   // Active wallet names (used by both P&L and trade cards)
   const activeNames = new Set(getActive().map(w => w.name));
 
-  // Simple activity check: wallet is active iff total_value differs from $500
-  const isActive = (p) => Math.abs(((p && p.total_value) || 500) - 500) > 0.05;
-
-  // P&L Cards — only wallets with actual trade activity (P&L changed)
-  const activeList = Object.entries(walletPnl)
+  // P&L Cards — only wallets with FILLED trades
+  const sortedPnl = Object.entries(walletPnl)
     .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
-    .filter(([_,p]) => isActive(p));
-  const sortedPnl = activeList.sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
+    .filter(([name]) => activeWallets.has(name))
+    .sort((a,b) => b[1].pnl_pct - a[1].pnl_pct);
   const inactiveCount = Object.entries(walletPnl)
     .filter(([name]) => activeNames.size === 0 || activeNames.has(name))
-    .filter(([_,p]) => !isActive(p)).length;
+    .filter(([name]) => !activeWallets.has(name)).length;
   let pnlHtml = '';
   if (sortedPnl.length === 0) {
     pnlHtml = '<div class="empty" style="grid-column:1/-1;">暂无活跃钱包 (' + inactiveCount + '个钱包无交易数据)</div>';
@@ -510,9 +511,9 @@ function render(state) {
   const walletTrades = {};
   filtered.forEach(t => { const w = t.wallet||'?'; if(!walletTrades[w]) walletTrades[w]=[]; walletTrades[w].push(t); });
 
-  // Split wallets using same isActive (single source of truth)
-  const activeW = allWallets.filter(w => isActive(walletPnl[w.name]));
-  const inactiveW = allWallets.filter(w => !isActive(walletPnl[w.name]));
+  // Split wallets using activeWallets (same source as P&L)
+  const activeW = allWallets.filter(w => activeWallets.has(w.name));
+  const inactiveW = allWallets.filter(w => !activeWallets.has(w.name));
 
   function renderTradeCard(w) {
     const wt = (walletTrades[w.name]||[]).slice(-8).reverse();

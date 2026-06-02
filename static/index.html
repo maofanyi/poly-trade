@@ -108,6 +108,11 @@ tbody tr:hover td { background: rgba(0,230,118,0.03); }
 .trade-detail { padding: 6px 14px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border); }
 .detail-row { display: flex; justify-content: space-between; font-size: 10px; padding: 2px 0; color: var(--muted); }
 .detail-row span:last-child { font-family: 'JetBrains Mono', monospace; color: var(--text); font-size: 10px; }
+
+/* Expired/resolved trade styling */
+.trade-row.expired { opacity: 0.65; background: rgba(255,171,0,0.03); }
+.trade-row.expired:hover { opacity: 0.85; }
+.resolved-badge { font-size: 7px; padding: 1px 4px; border-radius: 3px; background: rgba(255,171,0,0.15); color: var(--amber); margin-left: 4px; vertical-align: middle; white-space: nowrap; }
 @media(max-width:700px) {
   body { padding: 10px; }
   .summary-bar { gap: 14px; }

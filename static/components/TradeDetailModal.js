@@ -7,11 +7,15 @@ export default {
         <button class="modal-close" @click="$emit('close')">✕</button>
       </div>
 
-      <!-- Price Chart -->
+      <!-- Price Chart (Spell-style Canvas) -->
       <div class="modal-section">
         <div class="modal-section-title">📈 价格走势</div>
-        <div class="modal-card" style="padding:0;overflow:hidden;">
-          <div ref="chart" style="height:200px;width:100%;"></div>
+        <div class="modal-card" style="padding:0;overflow:hidden;position:relative;background:#0d1117;">
+          <canvas ref="chart" style="width:100%;height:220px;display:block;"></canvas>
+          <div v-if="tooltip.visible" class="chart-tooltip" :style="{left:tooltip.x+'px',top:tooltip.y+'px'}">
+            <div class="tooltip-label">{{ tooltip.label }}</div>
+            <div class="tooltip-value">{{ tooltip.value }}</div>
+          </div>
         </div>
       </div>
 
@@ -73,7 +77,7 @@ export default {
   </div>`,
   props: { trade: Object, walletCat: String },
   emits: ['close'],
-  data(){ return { chart: null }; },
+  data(){ return { chartData: [], tooltip: { visible: false, x: 0, y: 0, label: '', value: '' } }; },
   computed: {
     catClass(){ const m={Weather:'w',Politics:'p',Sports:'s',Tech:'t',Culture:'c'}; return m[this.walletCat]||'w'; },
     catName(){ const m={Weather:'天气',Politics:'政治',Sports:'体育',Tech:'科技',Culture:'文化'}; return m[this.walletCat]||this.walletCat; },
@@ -97,51 +101,127 @@ export default {
     trade: {
       immediate: true,
       async handler(t){
-        this.chart = null;
+        this.tooltip.visible = false;
         if(!t||!t.slug) return;
         try {
           const r = await fetch('/api/market/'+encodeURIComponent(t.slug)+'/trades');
           const data = await r.json();
-          this.$nextTick(()=> this.renderChart(data.points||[]));
+          this.chartData = data.points || [];
+          this.$nextTick(()=> this.drawChart());
         } catch(e){ console.error('chart:',e); }
       }
     }
   },
   methods: {
-    async renderChart(points){
-      if(!this.$refs.chart || points.length===0) return;
-      // Group trades by outcome
-      const yesPts = [], noPts = [];
-      const seen = new Set();
-      for(const p of points){
-        const key = p.t+'_'+p.p;
-        if(seen.has(key)) continue;
-        seen.add(key);
-        const dt = new Date(p.t*1000);
-        const label = dt.getMonth()+1+'/'+dt.getDate()+' '+dt.getHours()+':'+String(dt.getMinutes()).padStart(2,'0');
+    drawChart(){
+      const canvas = this.$refs.chart;
+      if(!canvas||!this.chartData.length) return;
+      const dpr = window.devicePixelRatio||1;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const W = rect.width;
+      const H = 220;
+      canvas.width = W*dpr; canvas.height = H*dpr;
+      canvas.style.width = W+'px'; canvas.style.height = H+'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr,dpr);
+
+      // Collect unique Yes-prices sorted by time
+      const seen=new Set();
+      const pts=[];
+      for(const p of this.chartData){
         if(p.o==='Yes'||p.o==='Up'){
-          yesPts.push([label, p.p, p.t]);
-        } else {
-          noPts.push([label, 1-p.p, p.t]);
+          const k=p.t+'_'+p.p.toFixed(4);
+          if(seen.has(k)) continue; seen.add(k);
+          pts.push({t:p.t, v:p.p});
         }
       }
-      yesPts.sort((a,b)=>a[2]-b[2]);
-      noPts.sort((a,b)=>a[2]-b[2]);
+      pts.sort((a,b)=>a.t-b.t);
+      if(pts.length<2) return;
 
-      import('echarts').then(echarts=>{
-        const c = echarts.init(this.$refs.chart, 'dark');
-        c.setOption({
-          backgroundColor: 'transparent',
-          tooltip: { trigger: 'axis', formatter: function(params){ let s=''; for(const p of params){ s+=p.marker+' '+p.seriesName+': '+(p.value*100).toFixed(1)+'%<br/>'; } return s; } },
-          grid: { left: 45, right: 15, top: 8, bottom: 30 },
-          xAxis: { type: 'category', data: yesPts.map(d=>d[0]), axisLabel: { color: '#5a6b7d', fontSize: 9, rotate: 30, interval: Math.max(1, Math.floor(yesPts.length/8)) }, axisTick: { show: false } },
-          yAxis: { type: 'value', min: 0, max: 1, axisLabel: { color: '#5a6b7d', fontSize: 10, formatter: v => (v*100).toFixed(0)+'%' }, splitLine: { lineStyle: { color: '#1c2838' } } },
-          series: [
-            { name: 'Yes', type: 'line', data: yesPts.map(d=>d[1]), lineStyle: { color: '#00e676', width: 1.5 }, itemStyle: { color: '#00e676' }, symbol: 'none', smooth: true },
-            { name: 'No', type: 'line', data: noPts.map(d=>d[1]), lineStyle: { color: '#ff3d4f', width: 1.5 }, itemStyle: { color: '#ff3d4f' }, symbol: 'none', smooth: true }
-          ]
-        }, true);
-      });
+      const pad={t:24,r:24,b:40,l:44};
+      const pw=W-pad.l-pad.r;
+      const ph=H-pad.t-pad.b;
+      const tMin=pts[0].t, tMax=pts[pts.length-1].t;
+      const tRange=tMax-tMin||1;
+      const vMin=0, vMax=1;
+
+      const tx=t=>(t-tMin)/tRange*pw+pad.l;
+      const ty=v=>pad.t+ph-(v-vMin)/(vMax-vMin)*ph;
+
+      // Gradient fill
+      const grad=ctx.createLinearGradient(0,pad.t,0,H-pad.b);
+      grad.addColorStop(0,'rgba(0,230,118,0.18)');
+      grad.addColorStop(1,'rgba(0,230,118,0.01)');
+
+      // Draw area fill
+      ctx.beginPath();
+      ctx.moveTo(tx(pts[0].t),H-pad.b);
+      for(const p of pts) ctx.lineTo(tx(p.t),ty(p.v));
+      ctx.lineTo(tx(pts[pts.length-1].t),H-pad.b);
+      ctx.closePath();
+      ctx.fillStyle=grad;
+      ctx.fill();
+
+      // Draw line
+      ctx.beginPath();
+      ctx.moveTo(tx(pts[0].t),ty(pts[0].v));
+      for(let i=1;i<pts.length;i++){
+        const x0=tx(pts[i-1].t),y0=ty(pts[i-1].v);
+        const x1=tx(pts[i].t),y1=ty(pts[i].v);
+        const cx=(x0+x1)/2;
+        ctx.bezierCurveTo(cx,y0,cx,y1,x1,y1);
+      }
+      ctx.strokeStyle='#00e676';
+      ctx.lineWidth=2;
+      ctx.stroke();
+
+      // Y-axis labels
+      ctx.fillStyle='#5a6b7d';
+      ctx.font='10px JetBrains Mono,monospace';
+      ctx.textAlign='right';
+      for(let v=0;v<=1;v+=0.25){
+        ctx.fillText(Math.round(v*100)+'%',pad.l-6,ty(v)+4);
+      }
+
+      // X-axis labels
+      ctx.textAlign='center';
+      const labelCount=Math.min(6,pts.length);
+      for(let i=0;i<labelCount;i++){
+        const idx=Math.floor(i*(pts.length-1)/(labelCount-1));
+        const d=new Date(pts[idx].t*1000);
+        const lbl=(d.getMonth()+1)+'/'+d.getDate();
+        ctx.fillText(lbl,tx(pts[idx].t),H-12);
+      }
+
+      // Grid lines
+      ctx.strokeStyle='rgba(28,40,56,0.6)';
+      ctx.lineWidth=0.5;
+      for(let v=0.25;v<=1;v+=0.25){
+        ctx.beginPath(); ctx.moveTo(pad.l,ty(v)); ctx.lineTo(W-pad.r,ty(v)); ctx.stroke();
+      }
+
+      // Mouse tracking
+      const self=this;
+      canvas.onmousemove=function(e){
+        const mx=e.offsetX;
+        let nearest=pts[0],minDist=Infinity;
+        for(const p of pts){ const d=Math.abs(tx(p.t)-mx); if(d<minDist){minDist=d;nearest=p;} }
+        const x=tx(nearest.t),y=ty(nearest.v);
+        const d=new Date(nearest.t*1000);
+        self.tooltip={
+          visible:true,
+          x:Math.min(x,W-130),
+          y:Math.max(y-50,0),
+          label:(d.getMonth()+1)+'/'+d.getDate()+' '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'),
+          value:(nearest.v*100).toFixed(1)+'%'
+        };
+        // Redraw dot
+        self.drawChart();
+        const c2=canvas.getContext('2d'); c2.scale(dpr,dpr);
+        c2.beginPath(); c2.arc(x,y,4,0,Math.PI*2); c2.fillStyle='#00e676'; c2.fill();
+        c2.beginPath(); c2.arc(x,y,8,0,Math.PI*2); c2.strokeStyle='rgba(0,230,118,0.3)'; c2.lineWidth=2; c2.stroke();
+      };
+      canvas.onmouseleave=function(){ self.tooltip.visible=false; self.drawChart(); };
     }
   }
 };

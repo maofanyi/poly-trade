@@ -139,6 +139,11 @@ tbody tr:hover td { background: rgba(0,230,118,0.03); }
 .modal-grid .label { color: var(--muted); font-size: 10px; display: block; margin-bottom: 2px; }
 .modal-grid .value { font-size: 13px; font-weight: 600; }
 @media(max-width:560px){ .modal-panel { width: 100%; border-radius: 0; } .modal-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Chart tooltip (Spell-style) */
+.chart-tooltip { position: absolute; pointer-events: none; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 8px 12px; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+.tooltip-label { font-size: 10px; color: #8b949e; margin-bottom: 2px; }
+.tooltip-value { font-size: 14px; font-weight: 700; color: #00e676; font-family: 'JetBrains Mono', monospace; }
 </style>
 </head>
 <body>

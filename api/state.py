@@ -93,4 +93,13 @@ def update_alert_config(data: AlertConfigUpdate):
 
 @router.get("/health")
 def health():
-    return {"status": "ok"}
+    import os
+    db = get_db()
+    wallet_count = db.execute("SELECT COUNT(*) FROM wallets WHERE active = 1").fetchone()[0]
+    db_path = os.environ.get("DB_PATH", "data/trade.db")
+    db_exists = os.path.exists(db_path)
+    return {
+        "status": "ok",
+        "wallets": wallet_count,
+        "db_persisted": db_exists
+    }

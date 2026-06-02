@@ -14,7 +14,10 @@ init_db()
 def test_health():
     resp = client.get("/api/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert "wallets" in data
+    assert "db_persisted" in data
 
 def test_list_wallets():
     resp = client.get("/api/wallets")

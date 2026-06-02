@@ -149,6 +149,25 @@ def validate_wallet(data: dict):
         "trades_found": len(trades),
         "already_added": False
     }
+@router.post("/reset")
+def reset_wallets_to_defaults():
+    """Reset all wallets to the default 10. Deactivates custom wallets, reactivates defaults."""
+    from config import DEFAULT_WALLETS
+    db = get_db()
+    # Soft-delete all wallets
+    db.execute("UPDATE wallets SET active = 0, paused = 0")
+    # Re-insert defaults (reactivate if exists, insert if new)
+    for w in DEFAULT_WALLETS:
+        existing = db.execute("SELECT id FROM wallets WHERE address = ?", (w["address"],)).fetchone()
+        if existing:
+            db.execute("UPDATE wallets SET active = 1, paused = 0, name = ?, category = ? WHERE id = ?",
+                       (w["name"], w["category"], existing["id"]))
+        else:
+            db.execute("INSERT INTO wallets (address, name, category) VALUES (?, ?, ?)",
+                       (w["address"], w["name"], w["category"]))
+    db.commit()
+    count = db.execute("SELECT COUNT(*) FROM wallets WHERE active = 1").fetchone()[0]
+    return {"ok": True, "active_wallets": count, "message": f"Reset to {count} default wallets"}
 
 from scores import get_wallet_scores, refresh_all_scores
 

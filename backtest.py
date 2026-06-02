@@ -102,35 +102,34 @@ def run_backtest(address: str, days: int = 30) -> dict:
             })
             del positions[pos_key]
 
-    # Mark expired positions: if slug has a timestamp > 1 hour ago, assume resolved at $0
+    # Separate expired positions from active ones
     now_ts = int(time.time())
     expired_count = 0
-    expired_loss = 0.0
-    expired_positions = []
+    expired_value = 0.0  # cost of expired positions (excluded from P&L)
     for pk, pos in list(positions.items()):
         expiry = _extract_expiry(pos.get('slug', ''))
         if expiry and (now_ts - expiry) > 3600:
-            # Market expired >1 hour ago — assume position went to $0
             expired_count += 1
-            expired_loss += pos['shares'] * pos['cost_basis']
-            expired_positions.append(pk)
+            expired_value += pos['shares'] * pos['cost_basis']
             del positions[pk]
 
-    # Remaining open positions — valued at cost (can't determine current price)
+    # Remaining open positions — valued at cost
     open_positions = len(positions)
     unrealized_value = sum(pos['shares'] * pos['cost_basis'] for pos in positions.values())
 
+    # P&L = realized (from SELLs) only. Expired excluded (unknown outcome).
+    # Open positions valued at cost (no mark-to-market).
+    final_pnl = round(realized_pnl, 2)
     total_value = round(cash + unrealized_value, 2)
-    final_pnl = round(realized_pnl - expired_loss, 2)
-    total_cost = sum(pos['shares'] * pos['cost_basis'] for pos in positions.values())
 
-    # Build warnings
     warnings = []
     total_simulated = buy_count + sell_count
     if total_simulated > 0 and buy_count / total_simulated > 0.8:
-        warnings.append(f"仅买入无卖出 ({buy_count}买/{sell_count}卖) — 盈亏不完整，仅供参考")
+        warnings.append(f"仅买入无卖出 ({buy_count}买/{sell_count}卖) — 无法计算完整盈亏")
     if expired_count > 0:
-        warnings.append(f"{expired_count}个仓位已过期(无法确定结果)，按归零计 — 实际结果可能不同")
+        warnings.append(f"{expired_count}个仓位已过期·结果未知·未计入盈亏 (成本\${expired_value:.0f})")
+    if sell_count > 0:
+        warnings.append(f"已实现盈亏基于{sell_count}笔卖出 — 这是实际可信的盈亏数据")
 
     return {
         "trades_analyzed": len(trade_log),
@@ -142,8 +141,12 @@ def run_backtest(address: str, days: int = 30) -> dict:
         "pnl_pct": round(final_pnl / capital * 100, 2),
         "realized_pnl": round(realized_pnl, 2),
         "expired_positions": expired_count,
-        "expired_loss": round(expired_loss, 2),
+        "expired_value": round(expired_value, 2),
         "open_positions": open_positions,
+        "unrealized_value": round(unrealized_value, 2),
+        "cash_remaining": round(cash, 2),
+        "buy_count": buy_count,
+        "sell_count": sell_count,
         "warnings": warnings,
         "trade_log": trade_log[-50:]
     }

@@ -139,10 +139,10 @@ def get_market_trades(slug: str, limit: int = 50):
             ts = int(datetime.fromisoformat(t['timestamp']).timestamp())
         except Exception:
             continue
-        k = f'{ts}_{t['price']:.4f}'
+        pp = float(t['price']); k = f'{ts}_{pp:.4f}'
         if k in seen: continue
         seen.add(k)
-        points.append({"t": ts, "p": round(float(t['price']), 4), "o": t['outcome'] or 'Yes'})
+        points.append({"t": ts, "p": round(pp, 4), "o": t['outcome'] or 'Yes'})
 
     # 3. Data API recent trades (latest ~50 trades for freshness)
     try:

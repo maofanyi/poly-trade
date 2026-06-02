@@ -111,8 +111,7 @@ export default {
     },
     statusLabel(){
       const s=this.trade?this.trade.status:''; if(s==='FILLED')return'已成交'; if(s==='SKIPPED'||s==='HISTORICAL')return'已跳过'; if(s==='POSITION')return'持仓中'; return'失败';
-    },
-    isPosition(){ return this.trade&&this.trade.status==='POSITION'; }
+    }
   },
   watch: {
     trade: {
@@ -130,6 +129,7 @@ export default {
     }
   },
   methods: {
+    isPosition(){ return this.trade&&this.trade.status==='POSITION'; },
     drawChart(){
       const canvas = this.$refs.chart;
       if(!canvas||!this.chartData.length) return;

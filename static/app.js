@@ -149,11 +149,19 @@ const app = createApp({
       } catch (e) {}
     }
 
+    async function resetDefaults() {
+      if (!confirm('确定重置为默认钱包列表？自定义添加的钱包将被移除。')) return;
+      try {
+        await fetch('/api/wallets/reset', { method: 'POST' });
+        await loadState();
+      } catch(e) { console.error(e); }
+    }
+
     onMounted(() => { loadState(); loadScores(); loadPortfolio(); connect(); });
 
     function catLabel(c) { const m={Weather:'天气',Politics:'政治',Sports:'体育',Tech:'科技',Culture:'文化'}; return m[c]||c||'—'; }
 
-    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, walletScores, portfolioData, catLabel, addWallet, removeWallet };
+    return { activeTab, currentFilter, wallets, trades, summary, filteredTrades, sortedPnl, inactiveWallets, pnlHistory, connected, activeNames, alerts, candidates, walletScores, portfolioData, catLabel, addWallet, removeWallet, resetDefaults };
   }
 });
 

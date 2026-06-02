@@ -7,10 +7,10 @@ services:
       - "8766:8766"
     volumes:
       - ./data:/app/data
-      - ./copy_trader_state.json:/app/copy_trader_state.json
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
+      - SCAN_INTERVAL=120
     logging:
       driver: "json-file"
       options:

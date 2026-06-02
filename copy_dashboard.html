@@ -302,7 +302,7 @@ function filterDiscover(cat, btn) {
 
 async function syncToServer(list) {
   try {
-    await fetch('http://localhost:8766/save_wallets', {
+    await fetch('save_wallets', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(list)

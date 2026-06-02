@@ -10,3 +10,10 @@ wallets_active.json
 monitor_log.txt
 ta_results*.json
 .nohup
+*.exe
+*.png
+*.json
+TradingAgents/
+test_yf.json
+tradingagents_input_2026-06-01.json
+.claude/

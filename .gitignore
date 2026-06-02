@@ -23,3 +23,26 @@ data/*.db-shm
 data/*.db-wal
 *.db-shm
 *.db-wal
+
+# Old/legacy files (kept locally but not in repo)
+CLAUDE.md
+close_all.py
+copy_dashboard.html
+copy_dashboard_working.html
+copy_trader.py
+init_pnl.py
+poly_analyzer.py
+polymarket-guide.html
+proxy_server.py
+quick_top20.py
+run_ta_batch.py
+start_monitor.py
+test_consistency.py
+test_copy_trader.py
+test_dashboard.py
+tradingagents-workbench.html
+docs/
+test_screenshot.png
+test_yf.json
+ta_results*.json
+live_pnl.json

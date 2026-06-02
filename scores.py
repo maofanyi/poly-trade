@@ -130,7 +130,7 @@ def discover_wallets(max_discover: int = 10) -> list[dict]:
             market_trades = _fetch(f"{DATA_API}/trades?slug={slug}&limit=40")
             time.sleep(0.3)
             for t in (market_trades or []):
-                addr = (t.get('user') or t.get('maker') or '').lower()
+                addr = (t.get('proxyWallet') or t.get('user') or t.get('maker') or '').lower()
                 if not addr or addr in known:
                     continue
                 if addr not in candidates:

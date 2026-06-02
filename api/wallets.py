@@ -187,12 +187,16 @@ def get_wallet_positions(wallet_id: int):
         if shares <= 0: continue
         cost_row = db.execute("""
             SELECT AVG(fill_price) as avg_cost FROM trade_log
-            WHERE wallet_id=? AND slug=? AND outcome=? AND side='BUY' AND status='FILLED'
+            WHERE wallet_id=? AND slug=? AND LOWER(outcome)=LOWER(?) AND side='BUY' AND status='FILLED'
         """, (wallet_id, slug, outcome)).fetchone()
         cost_basis = round(cost_row['avg_cost'] or 0, 4) if cost_row else 0
         mid = get_midpoint(slug)
         live_price = None
-        if mid: live_price = mid.get(outcome.upper(), mid.get(outcome.lower()))
+        if mid:
+            for k, v in mid.items():
+                if k.lower() == outcome.lower():
+                    live_price = v
+                    break
         unrealized = round((live_price - cost_basis) * shares, 4) if live_price and cost_basis else None
         result.append({"slug":slug,"outcome":outcome,"shares":round(shares,4),
                        "cost_basis":cost_basis,"live_price":live_price,

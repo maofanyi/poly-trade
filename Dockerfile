@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install Python dependencies
-RUN pip install --no-cache-dir fastapi 'uvicorn[standard]' polymarket-paper-trader
+RUN pip install --no-cache-dir fastapi 'uvicorn[standard]' polymarket-paper-trader websockets
 
 # Copy application code (excluding what's in .dockerignore)
 COPY . .

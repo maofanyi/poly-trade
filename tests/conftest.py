@@ -55,15 +55,23 @@ def isolation(test_db):
 
     FastAPI endpoints use get_db() which returns the same thread-local
     connection as test_db, so all API changes are also rolled back.
+
+    Uses SAVEPOINT instead of BEGIN/ROLLBACK because some tests (e.g.,
+    scanner tests) call init_db(), whose executescript() auto-commits
+    and releases any active transaction or savepoint.  With SAVEPOINT,
+    the cleanup is a best-effort ROLLBACK TO: if the savepoint is still
+    alive, the test's changes are reverted; if it was released (by
+    init_db), we log at debug level and move on, because init_db's
+    CREATE IF NOT EXISTS is idempotent anyway.
     """
+    import logging
+    _logger = logging.getLogger("tests.isolation")
     test_db.execute("SAVEPOINT _test_isolation")
     yield
-    # init_db() calls executescript() which issues COMMIT, releasing savepoints.
-    # Gracefully handle the case where the savepoint no longer exists.
     try:
         test_db.execute("ROLLBACK TO _test_isolation")
     except Exception:
-        pass  # savepoint already released (e.g., by init_db -> executescript)
+        _logger.debug("_test_isolation savepoint already released (e.g., by init_db)")
 
 
 @pytest.fixture
@@ -76,7 +84,12 @@ def test_client(test_db):
 
 @pytest.fixture
 def seed_wallets(test_db):
-    """Insert 2 test wallets, return list of dicts."""
+    """Insert 2 test wallets, return list of dicts.
+
+    No explicit commit — the isolation fixture wraps each test in
+    BEGIN/ROLLBACK, so uncommitted inserts are visible to subsequent
+    SELECTs on the same connection and are cleaned up on teardown.
+    """
     test_db.execute(
         "INSERT INTO wallets (address, name, category) VALUES (?, ?, ?)",
         ("0xAAA", "TestWallet1", "Weather")
@@ -85,6 +98,5 @@ def seed_wallets(test_db):
         "INSERT INTO wallets (address, name, category) VALUES (?, ?, ?)",
         ("0xBBB", "TestWallet2", "Politics")
     )
-    test_db.commit()
     wallets = test_db.execute("SELECT * FROM wallets WHERE active = 1").fetchall()
     return [dict(w) for w in wallets]

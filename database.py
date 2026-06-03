@@ -163,3 +163,7 @@ def migrate():
     if 'skip_reason' not in trade_cols:
         db.execute("ALTER TABLE trade_log ADD COLUMN skip_reason TEXT")
         db.commit()
+    alert_cols = [r[1] for r in db.execute("PRAGMA table_info(alert_config)").fetchall()]
+    if 'monitor_start' not in alert_cols:
+        db.execute("ALTER TABLE alert_config ADD COLUMN monitor_start INTEGER")
+        db.commit()

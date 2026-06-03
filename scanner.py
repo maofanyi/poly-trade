@@ -351,9 +351,18 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
 def scan_loop():
     """Background thread: continuously scan all active wallets for new trades."""
     db = get_db()
-    monitor_start = int(datetime.now().timestamp())
 
-    print(f"Scanner started. Monitor start: {monitor_start}")
+    # Persistent monitor_start — survives container restarts.
+    # Only set on very first run; subsequent restarts reuse the original.
+    row = db.execute("SELECT monitor_start FROM alert_config WHERE id = 1").fetchone()
+    if row and row['monitor_start']:
+        monitor_start = row['monitor_start']
+    else:
+        monitor_start = int(datetime.now().timestamp())
+        db.execute("UPDATE alert_config SET monitor_start = ? WHERE id = 1", (monitor_start,))
+        db.commit()
+
+    print(f"Scanner started. Monitor start: {monitor_start} (persisted)")
     scan_num = 0
 
     while True:

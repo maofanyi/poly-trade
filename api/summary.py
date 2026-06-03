@@ -111,6 +111,9 @@ def get_success_rate():
     for w in wallets:
         wid = w["id"]
         total = db.execute("SELECT COUNT(*) FROM trade_log WHERE wallet_id = ?", (wid,)).fetchone()[0]
+        historical = db.execute(
+            "SELECT COUNT(*) FROM trade_log WHERE wallet_id = ? AND status = 'HISTORICAL'", (wid,)
+        ).fetchone()[0]
         filled = db.execute(
             "SELECT COUNT(*) FROM trade_log WHERE wallet_id = ? AND status = 'FILLED'", (wid,)
         ).fetchone()[0]
@@ -120,6 +123,9 @@ def get_success_rate():
         failed = db.execute(
             "SELECT COUNT(*) FROM trade_log WHERE wallet_id = ? AND status = 'FAILED'", (wid,)
         ).fetchone()[0]
+
+        # Active trades = total minus HISTORICAL (pre-monitor-start trades that were never executed)
+        active = total - historical
 
         # Breakdown of skip reasons
         skip_breakdown = {}
@@ -141,12 +147,15 @@ def get_success_rate():
             (wid,)
         ).fetchone()[0]
 
-        success_rate = round(filled / total * 100, 1) if total > 0 else None
+        # Success rate based on active (non-historical) trades
+        success_rate = round(filled / active * 100, 1) if active > 0 else None
 
         result.append({
             "wallet_id": wid,
             "name": w["name"],
             "total": total,
+            "historical": historical,
+            "active": active,
             "filled": filled,
             "skipped": skipped,
             "failed": failed,

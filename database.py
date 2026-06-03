@@ -138,3 +138,7 @@ def migrate():
     if 'paused' not in cols:
         db.execute("ALTER TABLE wallets ADD COLUMN paused INTEGER DEFAULT 0")
         db.commit()
+    trade_cols = [r[1] for r in db.execute("PRAGMA table_info(trade_log)").fetchall()]
+    if 'skip_reason' not in trade_cols:
+        db.execute("ALTER TABLE trade_log ADD COLUMN skip_reason TEXT")
+        db.commit()

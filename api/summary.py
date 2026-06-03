@@ -99,3 +99,64 @@ def get_wallet_compare():
                 "points": [{"t": r['timestamp'][:16], "v": r['pnl_pct']} for r in rows]
             })
     return series
+
+
+@router.get("/summary/success-rate")
+def get_success_rate():
+    """Per-wallet trade success rate: FILLED vs SKIPPED breakdown."""
+    db = get_db()
+    wallets = db.execute("SELECT id, name FROM wallets WHERE active = 1 ORDER BY name").fetchall()
+
+    result = []
+    for w in wallets:
+        wid = w["id"]
+        total = db.execute("SELECT COUNT(*) FROM trade_log WHERE wallet_id = ?", (wid,)).fetchone()[0]
+        filled = db.execute(
+            "SELECT COUNT(*) FROM trade_log WHERE wallet_id = ? AND status = 'FILLED'", (wid,)
+        ).fetchone()[0]
+        skipped = db.execute(
+            "SELECT COUNT(*) FROM trade_log WHERE wallet_id = ? AND status = 'SKIPPED'", (wid,)
+        ).fetchone()[0]
+        failed = db.execute(
+            "SELECT COUNT(*) FROM trade_log WHERE wallet_id = ? AND status = 'FAILED'", (wid,)
+        ).fetchone()[0]
+
+        # Breakdown of skip reasons
+        skip_breakdown = {}
+        reasons = db.execute("""
+            SELECT skip_reason, COUNT(*) as cnt FROM trade_log
+            WHERE wallet_id = ? AND status = 'SKIPPED' AND skip_reason IS NOT NULL
+            GROUP BY skip_reason ORDER BY cnt DESC
+        """, (wid,)).fetchall()
+        for r in reasons:
+            skip_breakdown[r["skip_reason"]] = r["cnt"]
+
+        # Win/loss within FILLED
+        wins = db.execute(
+            "SELECT COUNT(*) FROM trade_log WHERE wallet_id = ? AND status = 'FILLED' AND pnl_realized > 0",
+            (wid,)
+        ).fetchone()[0]
+        losses = db.execute(
+            "SELECT COUNT(*) FROM trade_log WHERE wallet_id = ? AND status = 'FILLED' AND pnl_realized < 0",
+            (wid,)
+        ).fetchone()[0]
+
+        success_rate = round(filled / total * 100, 1) if total > 0 else None
+
+        result.append({
+            "wallet_id": wid,
+            "name": w["name"],
+            "total": total,
+            "filled": filled,
+            "skipped": skipped,
+            "failed": failed,
+            "success_rate": success_rate,
+            "wins": wins,
+            "losses": losses,
+            "win_rate": round(wins / filled * 100, 1) if filled > 0 else None,
+            "skip_reasons": skip_breakdown,
+        })
+
+    # Sort by total trades desc
+    result.sort(key=lambda x: x["total"], reverse=True)
+    return result

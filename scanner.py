@@ -32,9 +32,9 @@ def is_txn_seen(db, txn_hash: str) -> bool:
 def log_trade(db, wallet_id: int, **fields):
     db.execute("""
         INSERT INTO trade_log (wallet_id, txn_hash, side, size, whale_price, sim_usd,
-                               fill_price, status, slippage, pnl_realized, slug, outcome, timestamp)
+                               fill_price, status, slippage, pnl_realized, slug, outcome, timestamp, skip_reason)
         VALUES (:wallet_id, :txn_hash, :side, :size, :whale_price, :sim_usd,
-                :fill_price, :status, :slippage, :pnl_realized, :slug, :outcome, :timestamp)
+                :fill_price, :status, :slippage, :pnl_realized, :slug, :outcome, :timestamp, :skip_reason)
     """, dict(wallet_id=wallet_id, **fields))
     db.commit()
 
@@ -253,7 +253,7 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
                       txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
                       sim_usd=0, fill_price=None, status='SKIPPED',
                       slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts)
+                      slug=slug, outcome=outcome, timestamp=ts, skip_reason='already_holding')
             print(f"    {side} SKIP (already holding {outcome} in {slug[:30]})")
             processed += 1
             continue
@@ -264,7 +264,7 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
                       txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
                       sim_usd=0, fill_price=None, status='SKIPPED',
                       slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts)
+                      slug=slug, outcome=outcome, timestamp=ts, skip_reason='no_position')
             print(f"    {side} SKIP (no position to sell for {outcome} in {slug[:30]})")
             processed += 1
             continue
@@ -275,7 +275,7 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
                       txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
                       sim_usd=0, fill_price=None, status='SKIPPED',
                       slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts)
+                      slug=slug, outcome=outcome, timestamp=ts, skip_reason='expiring_soon')
             expiry_ts = _extract_expiry(slug)
             print(f"    {side} SKIP (market expires soon, ts={expiry_ts})")
             processed += 1
@@ -287,7 +287,7 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
                       txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
                       sim_usd=0, fill_price=None, status='SKIPPED',
                       slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts)
+                      slug=slug, outcome=outcome, timestamp=ts, skip_reason='market_closed')
             print(f"    {side} SKIP (market closed: {slug[:30]})")
             processed += 1
             continue
@@ -307,7 +307,7 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
                           txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
                           sim_usd=0, fill_price=fill_price, status='SKIPPED',
                           slippage=round(price_gap_pct, 2), pnl_realized=0,
-                          slug=slug, outcome=outcome, timestamp=ts)
+                          slug=slug, outcome=outcome, timestamp=ts, skip_reason='price_gap')
                 print(f"    {side} SKIP (price gap {price_gap_pct:.0f}%: whale={whale_price:.4f} fill={fill_price:.4f})")
                 processed += 1
                 continue
@@ -330,13 +330,14 @@ def scan_wallet(db, wallet: dict, ms: int) -> int:
         else:
             err = str(result.get('error', '')) if result else 'no response'
             status = 'SKIPPED' if ('not found' in err.lower() or 'MARKET_NOT_FOUND' in err) else 'FAILED'
+            skip_reason = 'market_not_found' if status == 'SKIPPED' else 'error'
             if status == 'SKIPPED':
                 _mark_market_closed(db, slug)
             log_trade(db, wallet_id,
                       txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
                       sim_usd=0, fill_price=None, status=status,
                       slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts)
+                      slug=slug, outcome=outcome, timestamp=ts, skip_reason=skip_reason)
             print(f"    {side} ${sim_usd:.2f} {status} ({err[:40]})")
 
         processed += 1

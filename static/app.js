@@ -13,6 +13,7 @@ import BacktestPanel from './components/BacktestPanel.js';
 import PortfolioPanel from './components/PortfolioPanel.js';
 import TradeDetailModal from './components/TradeDetailModal.js';
 import WalletCompareChart from './components/WalletCompareChart.js';
+import SuccessRatePanel from './components/SuccessRatePanel.js';
 
 const API = '/api';
 
@@ -195,5 +196,6 @@ app.component('BacktestPanel', BacktestPanel);
 app.component('PortfolioPanel', PortfolioPanel);
 app.component('TradeDetailModal', TradeDetailModal);
 app.component('WalletCompareChart', WalletCompareChart);
+app.component('SuccessRatePanel', SuccessRatePanel);
 
 app.mount('#app');

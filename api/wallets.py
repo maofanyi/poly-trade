@@ -172,6 +172,7 @@ def reset_wallets_to_defaults():
 @router.get("/{wallet_id}/positions")
 def get_wallet_positions(wallet_id: int):
     """Get current open positions with unrealized P&L."""
+    import urllib.request, json as _json
     db = get_db()
     wallet = db.execute("SELECT name FROM wallets WHERE id = ?", (wallet_id,)).fetchone()
     if not wallet:
@@ -185,27 +186,55 @@ def get_wallet_positions(wallet_id: int):
         outcome = pos.get('outcome', '')
         shares = pos.get('shares', 0)
         if shares <= 0: continue
+
+        # Cost basis: AVG fill_price from our BUY trades, fallback to whale_price
         cost_row = db.execute("""
-            SELECT AVG(fill_price) as avg_cost FROM trade_log
+            SELECT AVG(fill_price) as avg_cost, AVG(whale_price) as avg_whale FROM trade_log
             WHERE wallet_id=? AND slug=? AND LOWER(outcome)=LOWER(?) AND side='BUY' AND status='FILLED'
         """, (wallet_id, slug, outcome)).fetchone()
-        cost_basis = round(cost_row['avg_cost'] or 0, 4) if cost_row else 0
-        mid = get_midpoint(slug)
+        cost_basis = 0.0
+        if cost_row:
+            cost_basis = round(cost_row['avg_cost'] or cost_row['avg_whale'] or 0, 4)
+
+        # Live price: try pm-trader first, then Data API, then last trade price
         live_price = None
+        mid = get_midpoint(slug)
         if mid:
             for k, v in mid.items():
                 if k.lower() == outcome.lower() and v is not None:
                     live_price = v
                     break
-        # Skip positions on expired/unfindable markets (no live price and no cost basis)
+
+        # Fallback: Data API price endpoint
+        if live_price is None:
+            try:
+                url = f"https://data-api.polymarket.com/price?slug={urllib.parse.quote(slug)}"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    prices = _json.loads(resp.read())
+                if isinstance(prices, dict):
+                    for k, v in prices.items():
+                        if k.lower() == outcome.lower() and v is not None:
+                            live_price = float(v)
+                            break
+            except Exception:
+                pass
+
+        # Last resort: use cost_basis as estimated current price (no P&L but shows value)
+        if live_price is None and cost_basis > 0:
+            live_price = cost_basis
+
+        # Skip only if we have absolutely no data
         if live_price is None and cost_basis == 0:
             continue
+
         unrealized = round((live_price - cost_basis) * shares, 4) if live_price is not None and cost_basis else None
+        pos_value = round(shares * (live_price or cost_basis or 0), 2)
         result.append({"slug":slug,"outcome":outcome,"shares":round(shares,4),
                        "cost_basis":cost_basis,"live_price":live_price,
                        "unrealized_pnl":unrealized,
-                       "value":round(shares*(live_price or cost_basis or 0),2),
-                       "active":live_price is not None})
+                       "value":pos_value,
+                       "active":live_price is not None and live_price != cost_basis})
     return result
 
 @router.post("/cleanup-positions")

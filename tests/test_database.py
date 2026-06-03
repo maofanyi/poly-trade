@@ -42,7 +42,6 @@ class TestWalletsTable:
         test_db.execute(
             "INSERT INTO wallets (address, name, category) VALUES ('0xAAA', 'W1', 'Weather')"
         )
-        test_db.commit()
         with pytest.raises(sqlite3.IntegrityError):
             test_db.execute(
                 "INSERT INTO wallets (address, name, category) VALUES ('0xAAA', 'W2', 'Sports')"

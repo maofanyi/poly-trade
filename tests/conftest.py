@@ -98,11 +98,11 @@ def seed_wallets(test_db):
     SELECTs on the same connection and are cleaned up on teardown.
     """
     test_db.execute(
-        "INSERT INTO wallets (address, name, category) VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO wallets (address, name, category) VALUES (?, ?, ?)",
         ("0xAAA", "TestWallet1", "Weather")
     )
     test_db.execute(
-        "INSERT INTO wallets (address, name, category) VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO wallets (address, name, category) VALUES (?, ?, ?)",
         ("0xBBB", "TestWallet2", "Politics")
     )
     wallets = test_db.execute("SELECT * FROM wallets WHERE active = 1").fetchall()

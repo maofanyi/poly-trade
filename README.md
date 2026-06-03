@@ -28,6 +28,41 @@ SCAN_ENABLED=0       # 设为0禁用扫描(仅API)
 DB_PATH=data/trade.db
 ```
 
+## 开发工作流
+
+### 分支策略
+
+```
+master  ←── 受保护，仅通过 PR 合并
+  │
+  ├── fix/*    ← push 时跑测试 → PR → merge
+  └── feat/*   ← push 时跑测试 → PR → merge
+```
+
+### 运行测试
+
+```bash
+# 安装开发依赖
+pip install pytest pytest-asyncio httpx
+
+# 运行后端测试
+python -m pytest tests/ --ignore=tests/e2e -v
+
+# 运行 E2E 测试 (需要先安装 Playwright)
+pip install playwright pytest-playwright
+playwright install chromium
+python -m pytest tests/e2e/ -v
+
+# 运行全部测试
+python -m pytest tests/ -v
+```
+
+### CI
+
+- 每次 push 任意分支: 自动运行后端测试 + E2E 测试
+- PR → master: 跑测试
+- merge 到 master: 跑测试 → Docker 构建推送 (测试不通过不构建)
+
 ## NAS 部署 (极空间 Z2Pro / ARM64)
 
 ### 前置条件
@@ -156,9 +191,9 @@ GitHub → Settings → Secrets and variables → Actions：
 Docker 数据卷 `poly-trade-data` 挂载到容器内 `/app/data`：
 
 - `trade.db` — SQLite 数据库 (钱包、交易记录、盈亏快照)
-- pm-trader 账户状态在每个容器内独立
+- pm-trader 账户数据持久化在数据卷中
 
-**注意**: 重建容器时 `pm-trader` 的模拟账户会被重置为 $500 初始资金，但交易历史和钱包配置保留在数据卷中。
+**注意**: 数据卷 `poly-trade-data` 同时保存 SQLite 数据库和 pm-trader 账户状态，重建容器后余额和持仓均保留。如需重置可在监控面板中手动操作。
 
 ## 项目结构
 

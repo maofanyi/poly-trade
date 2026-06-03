@@ -61,7 +61,10 @@ def get_pnl_segments():
 
     def segment_since(since_expr):
         rows = db.execute(f"""
-            SELECT wallet_id, MIN(total_value) as first_val, MAX(total_value) as last_val FROM (
+            SELECT wallet_id,
+                   MAX(CASE WHEN rn_asc = 1 THEN total_value END) as first_val,
+                   MAX(CASE WHEN rn_desc = 1 THEN total_value END) as last_val
+            FROM (
                 SELECT wallet_id, total_value,
                        ROW_NUMBER() OVER (PARTITION BY wallet_id ORDER BY id ASC) as rn_asc,
                        ROW_NUMBER() OVER (PARTITION BY wallet_id ORDER BY id DESC) as rn_desc

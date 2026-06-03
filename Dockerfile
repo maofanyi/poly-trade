@@ -8,8 +8,8 @@ RUN pip install --no-cache-dir fastapi 'uvicorn[standard]' polymarket-paper-trad
 # Copy application code (excluding what's in .dockerignore)
 COPY . .
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data
+# Create data directories for SQLite and pm-trader (persisted via volume)
+RUN mkdir -p /app/data/pm-trader
 
 # Expose dashboard port
 EXPOSE 8766

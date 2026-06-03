@@ -39,12 +39,15 @@ class TestWalletsTable:
             assert c in cols, f"Missing wallets column: {c}"
 
     def test_address_unique(self, test_db):
+        # Use a unique address to avoid collisions with seed data leaked
+        # by other tests that commit within the same session.
+        addr = f"0xUNIQ_TEST_{id(self)}"
         test_db.execute(
-            "INSERT INTO wallets (address, name, category) VALUES ('0xAAA', 'W1', 'Weather')"
+            "INSERT INTO wallets (address, name, category) VALUES (?, 'W1', 'Weather')", (addr,)
         )
         with pytest.raises(sqlite3.IntegrityError):
             test_db.execute(
-                "INSERT INTO wallets (address, name, category) VALUES ('0xAAA', 'W2', 'Sports')"
+                "INSERT INTO wallets (address, name, category) VALUES (?, 'W2', 'Sports')", (addr,)
             )
 
 

@@ -19,7 +19,7 @@ def update_config(db, **kwargs):
     db.commit()
 
 def was_alerted_recently(db, alert_type: str, wallet_id: int, hours: int = 1) -> bool:
-    since = (datetime.now() - timedelta(hours=hours)).isoformat()
+    since = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
     row = db.execute(
         "SELECT id FROM alert_log WHERE alert_type=? AND wallet_id=? AND created_at > ? LIMIT 1",
         (alert_type, wallet_id, since)

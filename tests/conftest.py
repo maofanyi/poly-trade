@@ -28,6 +28,10 @@ def test_db():
 
     Uses a temp file instead of :memory: to avoid shared-cache mode, which
     leaks data between connections and breaks transaction-based isolation.
+
+    Pre-seeds a sentinel wallet so the FastAPI lifespan's ``COUNT(*)=0``
+    check does not attempt to write, avoiding "database is locked" when
+    the isolation SAVEPOINT holds an implicit transaction.
     """
     # Remove any stale file from a previous crashed session
     if os.path.exists(_TEST_DB_PATH):
@@ -38,6 +42,12 @@ def test_db():
     _local.db = None
     init_db()
     db = get_db()
+    # Pre-seed a sentinel row so the lifespan skips its own INSERT
+    db.execute(
+        "INSERT OR IGNORE INTO wallets (address, name, category) VALUES (?, ?, ?)",
+        ("0x__SENTINEL__", "_sentinel_", "Test")
+    )
+    db.commit()
     yield db
     # Reset thread-local so no dangling reference keeps WAL files open on Windows
     _local.db = None
@@ -74,9 +84,13 @@ def isolation(test_db):
         _logger.debug("_test_isolation savepoint already released")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_client(test_db):
-    """FastAPI TestClient with scanner disabled.
+    """Session-scoped FastAPI TestClient with scanner disabled.
+
+    Session scope avoids creating a new TestClient (and triggering the
+    full FastAPI lifespan) for every test function, which caused SQLite
+    "database is locked" errors from concurrent lifespan startups.
 
     Note: FastAPI runs synchronous endpoint handlers in a thread pool.
     Each worker thread gets its own connection via get_db(), so changes
@@ -91,7 +105,7 @@ def test_client(test_db):
 
 @pytest.fixture
 def seed_wallets(test_db):
-    """Insert 2 test wallets, return list of dicts.
+    """Insert 2 test wallets, return list of dicts (excludes sentinel).
 
     No explicit commit — the isolation fixture wraps each test in a
     SAVEPOINT, so uncommitted inserts are visible to subsequent
@@ -105,5 +119,7 @@ def seed_wallets(test_db):
         "INSERT OR IGNORE INTO wallets (address, name, category) VALUES (?, ?, ?)",
         ("0xBBB", "TestWallet2", "Politics")
     )
-    wallets = test_db.execute("SELECT * FROM wallets WHERE active = 1").fetchall()
+    wallets = test_db.execute(
+        "SELECT * FROM wallets WHERE active = 1 AND name != '_sentinel_'"
+    ).fetchall()
     return [dict(w) for w in wallets]

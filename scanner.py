@@ -30,6 +30,7 @@ def is_txn_seen(db, txn_hash: str) -> bool:
     return row is not None
 
 def log_trade(db, wallet_id: int, **fields):
+    fields.setdefault("skip_reason", None)
     db.execute("""
         INSERT INTO trade_log (wallet_id, txn_hash, side, size, whale_price, sim_usd,
                                fill_price, status, slippage, pnl_realized, slug, outcome, timestamp, skip_reason)
@@ -356,46 +357,56 @@ def scan_loop():
     scan_num = 0
 
     while True:
-        scan_num += 1
-        scan_start = datetime.now()
-        print(f"\n--- Scan #{scan_num} {scan_start.strftime('%H:%M:%S')} ---")
+        try:
+            scan_num += 1
+            scan_start = datetime.now()
+            print(f"\n--- Scan #{scan_num} {scan_start.strftime('%H:%M:%S')} ---")
 
-        db.execute("INSERT INTO scan_log (scan_start) VALUES (?)", (scan_start.isoformat(),))
-        db.commit()
-        scan_log_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+            # Reconnect to DB in case connection was lost
+            db = get_db()
+            db.execute("INSERT INTO scan_log (scan_start) VALUES (?)", (scan_start.isoformat(),))
+            db.commit()
+            scan_log_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-        wallets = db.execute("SELECT * FROM wallets WHERE active = 1").fetchall()
-        total_new = 0
+            wallets = db.execute("SELECT * FROM wallets WHERE active = 1").fetchall()
+            total_new = 0
 
-        for w in wallets:
-            wallet_dict = {"address": w['address'], "name": w['name'], "category": w['category']}
-            total_new += scan_wallet(db, wallet_dict, monitor_start)
+            for w in wallets:
+                try:
+                    wallet_dict = {"address": w['address'], "name": w['name'], "category": w['category']}
+                    total_new += scan_wallet(db, wallet_dict, monitor_start)
+                except Exception as e:
+                    print(f"  [{w['name']}] scan error: {e}")
 
-        scan_end = datetime.now()
-        elapsed = (scan_end - scan_start).total_seconds()
-        db.execute("UPDATE scan_log SET scan_end=?, new_trades_found=?, status=? WHERE id=?",
-                   (scan_end.isoformat(), total_new, 'ok', scan_log_id))
-        db.commit()
+            scan_end = datetime.now()
+            elapsed = (scan_end - scan_start).total_seconds()
+            db.execute("UPDATE scan_log SET scan_end=?, new_trades_found=?, status=? WHERE id=?",
+                       (scan_end.isoformat(), total_new, 'ok', scan_log_id))
+            db.commit()
 
-        print(f"  Scan done in {elapsed:.1f}s | New trades: {total_new}")
+            print(f"  Scan done in {elapsed:.1f}s | New trades: {total_new}")
 
-        # Broadcast P&L update via WebSocket
-        if _ws_manager:
-            pnl_data = []
-            for w_row in wallets:
-                pnl_row = db.execute(
-                    "SELECT * FROM pnl_snapshots WHERE wallet_id=? ORDER BY id DESC LIMIT 1",
-                    (w_row["id"],)
-                ).fetchone()
-                if pnl_row:
-                    pnl_data.append({"name": w_row["name"], "wallet_id": w_row["id"],
-                                     "cash": pnl_row["cash"], "total_value": pnl_row["total_value"],
-                                     "pnl": pnl_row["pnl"], "pnl_pct": pnl_row["pnl_pct"]})
-            try:
-                import asyncio as _asyncio
-                _asyncio.run(_ws_manager.broadcast({"type": "pnl_update", "wallets": pnl_data}))
-            except Exception:
-                pass
+            # Broadcast P&L update via WebSocket
+            if _ws_manager:
+                pnl_data = []
+                for w_row in wallets:
+                    pnl_row = db.execute(
+                        "SELECT * FROM pnl_snapshots WHERE wallet_id=? ORDER BY id DESC LIMIT 1",
+                        (w_row["id"],)
+                    ).fetchone()
+                    if pnl_row:
+                        pnl_data.append({"name": w_row["name"], "wallet_id": w_row["id"],
+                                         "cash": pnl_row["cash"], "total_value": pnl_row["total_value"],
+                                         "pnl": pnl_row["pnl"], "pnl_pct": pnl_row["pnl_pct"]})
+                try:
+                    import asyncio as _asyncio
+                    _asyncio.run(_ws_manager.broadcast({"type": "pnl_update", "wallets": pnl_data}))
+                except Exception:
+                    pass
 
-        print(f"  Next scan in {SCAN_INTERVAL}s...")
+            print(f"  Next scan in {SCAN_INTERVAL}s...")
+        except Exception as e:
+            import traceback
+            print(f"  !! Scanner error (will retry): {e}")
+            traceback.print_exc()
         time.sleep(SCAN_INTERVAL)

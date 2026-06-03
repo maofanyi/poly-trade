@@ -4,16 +4,18 @@ import os
 # Polymarket Data API
 DATA_API = "https://data-api.polymarket.com"
 
-# pm-trader CLI
-PM_TRADER = "pm-trader"
+# Paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# pm-trader CLI (data dir persisted in volume to survive container rebuilds)
+PM_DATA_DIR = os.environ.get("PM_DATA_DIR", os.path.join(BASE_DIR, "data", "pm-trader"))
+PM_TRADER = f"pm-trader --data-dir {PM_DATA_DIR}"
 
 # Trading parameters
 INITIAL_CAPITAL = 500.0
 MAX_TRADES_PER_SCAN = 2
 SCAN_INTERVAL = int(os.environ.get("SCAN_INTERVAL", "120"))
 
-# Paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "trade.db"))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 

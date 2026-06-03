@@ -6,6 +6,7 @@ from config import DB_PATH
 
 _local = threading.local()
 
+
 def _ensure_data_dir():
     db_dir = os.path.dirname(DB_PATH)
     if db_dir and not os.path.exists(db_dir):
@@ -27,9 +28,17 @@ def get_db() -> sqlite3.Connection:
     return _local.db
 
 def init_db():
-    """Create all tables if they don't exist."""
+    """Create all tables if they don't exist.
+
+    Uses individual db.execute() calls instead of executescript() because
+    executescript() issues an implicit COMMIT that releases any active
+    SAVEPOINT, breaking test-isolation fixtures that wrap tests in savepoints.
+    CREATE TABLE IF NOT EXISTS is a DDL statement that only auto-commits
+    when it actually creates a table; when the table already exists, no
+    implicit commit is issued, and no explicit commit is needed.
+    """
     db = get_db()
-    db.executescript("""
+    db.execute("""
         CREATE TABLE IF NOT EXISTS wallets (
             id INTEGER PRIMARY KEY,
             address TEXT NOT NULL UNIQUE,
@@ -38,8 +47,9 @@ def init_db():
             active INTEGER DEFAULT 1,
             paused INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now','localtime'))
-        );
-
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS trade_log (
             id INTEGER PRIMARY KEY,
             wallet_id INTEGER NOT NULL REFERENCES wallets(id),
@@ -55,8 +65,9 @@ def init_db():
             slug TEXT,
             outcome TEXT,
             timestamp TEXT DEFAULT (datetime('now','localtime'))
-        );
-
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS pnl_snapshots (
             id INTEGER PRIMARY KEY,
             wallet_id INTEGER NOT NULL REFERENCES wallets(id),
@@ -65,16 +76,18 @@ def init_db():
             pnl REAL DEFAULT 0,
             pnl_pct REAL DEFAULT 0,
             timestamp TEXT DEFAULT (datetime('now','localtime'))
-        );
-
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS scan_log (
             id INTEGER PRIMARY KEY,
             scan_start TEXT,
             scan_end TEXT,
             new_trades_found INTEGER DEFAULT 0,
             status TEXT DEFAULT 'ok'
-        );
-
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS alert_config (
             id INTEGER PRIMARY KEY,
             enabled INTEGER DEFAULT 1,
@@ -83,8 +96,9 @@ def init_db():
             webhook_type TEXT,
             webhook_url TEXT,
             updated_at TEXT DEFAULT (datetime('now','localtime'))
-        );
-
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS alert_log (
             id INTEGER PRIMARY KEY,
             alert_type TEXT NOT NULL,
@@ -92,8 +106,9 @@ def init_db():
             message TEXT,
             sent_via TEXT DEFAULT 'toast',
             created_at TEXT DEFAULT (datetime('now','localtime'))
-        );
-
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS wallet_scores (
             wallet_id INTEGER PRIMARY KEY REFERENCES wallets(id),
             trades INTEGER DEFAULT 0,
@@ -102,8 +117,9 @@ def init_db():
             buy_pct REAL DEFAULT 0,
             score REAL DEFAULT 0,
             updated_at TEXT DEFAULT (datetime('now','localtime'))
-        );
-
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS discovered_wallets (
             address TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -113,22 +129,27 @@ def init_db():
             markets INTEGER DEFAULT 0,
             score REAL DEFAULT 0,
             updated_at TEXT DEFAULT (datetime('now','localtime'))
-        );
-
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS price_history (
             id INTEGER PRIMARY KEY,
             slug TEXT NOT NULL,
             outcome TEXT NOT NULL,
             price REAL NOT NULL,
             recorded_at TEXT DEFAULT (datetime('now','localtime'))
-        );
-
+        )
+    """)
+    db.execute("""
         CREATE TABLE IF NOT EXISTS closed_markets (
             slug TEXT PRIMARY KEY,
             detected_at TEXT DEFAULT (datetime('now','localtime'))
-        );
+        )
     """)
-    db.commit()
+    # No explicit commit — CREATE TABLE IF NOT EXISTS is DDL that
+    # auto-commits when it actually creates a table.  When tables already
+    # exist it is a no-op, so active SAVEPOINTs survive.  An explicit
+    # COMMIT would release those savepoints.
     migrate()
 
 def migrate():

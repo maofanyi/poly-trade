@@ -51,18 +51,18 @@ def test_db():
 
 @pytest.fixture(autouse=True)
 def isolation(test_db):
-    """Wrap each test in a transaction, rollback after.
+    """Wrap each test in a SAVEPOINT, rollback after.
 
-    FastAPI endpoints use get_db() which returns the same thread-local
-    connection as test_db, so all API changes are also rolled back.
+    Uses SAVEPOINT instead of BEGIN/ROLLBACK because some code paths
+    (e.g., init_db via FastAPI lifespan) may issue commits that release
+    the savepoint.  The cleanup is best-effort: if the savepoint is
+    still alive, the test's changes are reverted; if it was released,
+    we log at debug level and move on.
 
-    Uses SAVEPOINT instead of BEGIN/ROLLBACK because some tests (e.g.,
-    scanner tests) call init_db(), whose executescript() auto-commits
-    and releases any active transaction or savepoint.  With SAVEPOINT,
-    the cleanup is a best-effort ROLLBACK TO: if the savepoint is still
-    alive, the test's changes are reverted; if it was released (by
-    init_db), we log at debug level and move on, because init_db's
-    CREATE IF NOT EXISTS is idempotent anyway.
+    CRITICAL: init_db() no longer calls executescript() which would
+    unconditionally release the savepoint.  It now uses individual
+    db.execute() calls for each CREATE TABLE IF NOT EXISTS, which are
+    no-ops when tables already exist and do not auto-commit.
     """
     import logging
     _logger = logging.getLogger("tests.isolation")
@@ -71,12 +71,19 @@ def isolation(test_db):
     try:
         test_db.execute("ROLLBACK TO _test_isolation")
     except Exception:
-        _logger.debug("_test_isolation savepoint already released (e.g., by init_db)")
+        _logger.debug("_test_isolation savepoint already released")
 
 
 @pytest.fixture
 def test_client(test_db):
-    """FastAPI TestClient with scanner disabled."""
+    """FastAPI TestClient with scanner disabled.
+
+    Note: FastAPI runs synchronous endpoint handlers in a thread pool.
+    Each worker thread gets its own connection via get_db(), so changes
+    made through test_client are committed on separate connections and
+    are NOT rolled back by the isolation fixture's SAVEPOINT (which
+    only covers the test_db connection on the main thread).
+    """
     from main import app
     with TestClient(app) as client:
         yield client
@@ -86,8 +93,8 @@ def test_client(test_db):
 def seed_wallets(test_db):
     """Insert 2 test wallets, return list of dicts.
 
-    No explicit commit — the isolation fixture wraps each test in
-    BEGIN/ROLLBACK, so uncommitted inserts are visible to subsequent
+    No explicit commit — the isolation fixture wraps each test in a
+    SAVEPOINT, so uncommitted inserts are visible to subsequent
     SELECTs on the same connection and are cleaned up on teardown.
     """
     test_db.execute(

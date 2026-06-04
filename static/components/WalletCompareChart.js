@@ -13,7 +13,12 @@ export default {
       this.series = await r.json();
       this.$nextTick(() => this.render());
     } catch(e){}
-    window.addEventListener('resize', () => this.chart?.resize());
+    this._resizeHandler = () => this.chart?.resize();
+    window.addEventListener('resize', this._resizeHandler);
+  },
+  beforeUnmount(){
+    this.chart?.dispose();
+    window.removeEventListener('resize', this._resizeHandler);
   },
   methods: {
     render(){

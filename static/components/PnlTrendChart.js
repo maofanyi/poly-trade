@@ -11,7 +11,8 @@ export default {
   </div>`,
   props: { wallets:{ type:Array, default:()=>[] } },
   data(){ return { selectedWallet:'', days:7, chart:null }; },
-  mounted(){ this.chart=echarts.init(this.$refs.chart,'dark'); window.addEventListener('resize',()=>this.chart?.resize()); },
+  mounted(){ this.chart=echarts.init(this.$refs.chart,'dark'); this._onResize=()=>this.chart?.resize(); window.addEventListener('resize',this._onResize); },
+  beforeUnmount(){ this.chart?.dispose(); window.removeEventListener('resize',this._onResize); },
   methods: {
     async loadData(){
       if(!this.selectedWallet)return;

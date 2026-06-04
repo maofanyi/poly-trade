@@ -31,14 +31,11 @@ async def lifespan(app: FastAPI):
             )
         db.commit()
         print(f"Seeded {len(DEFAULT_WALLETS)} default wallets")
-    # Re-backfill positions from recent trades only (7 days, excluding closed)
-    from database import backfill_positions
+    # Clear stale positions — scanner will rebuild from live Data API
     old_cnt = db.execute("SELECT COUNT(*) FROM positions").fetchone()[0]
     db.execute("DELETE FROM positions")
     db.commit()
-    backfill_positions()
-    new_cnt = db.execute("SELECT COUNT(*) FROM positions").fetchone()[0]
-    print(f"Backfill: cleared {old_cnt} old positions, restored {new_cnt} from last 7 days")
+    print(f"Positions: cleared {old_cnt} old entries, scanner will rebuild from live data")
     # Ensure alert_config row exists
     db.execute("INSERT OR IGNORE INTO alert_config (id) VALUES (1)")
     db.commit()

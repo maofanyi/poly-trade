@@ -35,7 +35,7 @@ def is_txn_seen(db, txn_hash: str) -> bool:
 def log_trade(db, wallet_id: int, **fields):
     fields.setdefault("skip_reason", None)
     db.execute("""
-        INSERT INTO trade_log (wallet_id, txn_hash, side, size, whale_price, sim_usd,
+        INSERT OR IGNORE INTO trade_log (wallet_id, txn_hash, side, size, whale_price, sim_usd,
                                fill_price, status, slippage, pnl_realized, slug, outcome, timestamp, skip_reason)
         VALUES (:wallet_id, :txn_hash, :side, :size, :whale_price, :sim_usd,
                 :fill_price, :status, :slippage, :pnl_realized, :slug, :outcome, :timestamp, :skip_reason)
@@ -58,7 +58,8 @@ def update_position(db, wallet_id: int, trade: dict):
     slug = trade.get('slug', '')
     outcome = trade.get('outcome', '')
     side = (trade.get('side', 'BUY') or 'BUY').upper()
-    size = float(trade.get('size', 0))
+    size = float(trade.get('size') or 0)
+    price = float(trade.get('price') or 0)
     ts = str(trade.get('timestamp', ''))
 
     if not slug or not outcome or size <= 0:
@@ -77,7 +78,6 @@ def update_position(db, wallet_id: int, trade: dict):
         new_whale = max(0.0, current - size)
 
     # Track whale's average entry price (BUY only)
-    price = float(trade.get('price', 0))
     if side == 'BUY' and price > 0:
         old_cost = row['avg_cost'] if row else 0.0
         old_shares = row['whale_shares'] if row else 0.0

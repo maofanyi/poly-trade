@@ -136,7 +136,9 @@ def health():
     return {
         "status": "ok",
         "wallets": wallet_count,
-        "db_persisted": db_exists
+        "db_persisted": db_exists,
+        "version": "2.0.0",
+        "phase": "position-mirroring"
     }
 
 @router.get("/market/{slug:path}/trades")

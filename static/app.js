@@ -1,4 +1,8 @@
 import { createApp, ref, computed, onMounted } from 'vue';
+
+const VERSION = '2.0.0 (Phase A — position mirroring, 2026-06-04)';
+console.log('%c Polymarket Copy Trader %c v' + VERSION, 'font-weight:bold;font-size:16px;', 'font-size:12px;color:#888;');
+
 import { useWebSocket } from './composables/useWebSocket.js';
 import AppHeader from './components/AppHeader.js';
 import SummaryBar from './components/SummaryBar.js';

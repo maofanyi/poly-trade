@@ -21,7 +21,7 @@ def get_db() -> sqlite3.Connection:
             uri = 'file:memory?cache=shared&mode=memory'
             _local.db = sqlite3.connect(uri, uri=True)
         else:
-            _local.db = sqlite3.connect(DB_PATH, timeout=10)
+            _local.db = sqlite3.connect(DB_PATH, timeout=30)  # 30 seconds
         _local.db.row_factory = sqlite3.Row
         _local.db.execute("PRAGMA journal_mode=WAL")
         _local.db.execute("PRAGMA foreign_keys=ON")

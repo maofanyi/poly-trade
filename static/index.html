@@ -219,6 +219,7 @@ tbody tr:hover td { background: rgba(0,230,118,0.03); }
     </div>
   </div>
   <div v-show="activeTab==='analytics'">
+    <risk-panel></risk-panel>
     <success-rate-panel></success-rate-panel>
     <wallet-compare-chart></wallet-compare-chart>
     <pnl-trend-chart :wallets="wallets"></pnl-trend-chart>

@@ -64,11 +64,12 @@ export default {
     },
     reasonLabel(r) {
       const m = {
-        already_holding: '已持仓',
-        no_position: '无仓位',
-        expiring_soon: '即将到期',
-        market_closed: '市场关闭',
         price_gap: '价差过大',
+        market_closed: '市场关闭',
+        size_too_small: '低于最低金额',
+        max_positions: '仓位已满',
+        daily_limit: '日亏损限额',
+        per_market_cap: '单仓上限',
         market_not_found: '市场未找到',
         error: '错误',
       };

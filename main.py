@@ -31,11 +31,13 @@ async def lifespan(app: FastAPI):
             )
         db.commit()
         print(f"Seeded {len(DEFAULT_WALLETS)} default wallets")
-    # Clear stale positions — scanner will rebuild from live Data API
-    old_cnt = db.execute("SELECT COUNT(*) FROM positions").fetchone()[0]
+    # Clear stale state — scanner will rebuild from live Data API
+    old_pos = db.execute("SELECT COUNT(*) FROM positions").fetchone()[0]
+    old_closed = db.execute("SELECT COUNT(*) FROM closed_markets").fetchone()[0]
     db.execute("DELETE FROM positions")
+    db.execute("DELETE FROM closed_markets")
     db.commit()
-    print(f"Positions: cleared {old_cnt} old entries, scanner will rebuild from live data")
+    print(f"Startup: cleared {old_pos} positions and {old_closed} closed markets")
     # Ensure alert_config row exists
     db.execute("INSERT OR IGNORE INTO alert_config (id) VALUES (1)")
     db.commit()

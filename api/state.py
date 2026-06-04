@@ -139,10 +139,18 @@ def health():
     except Exception:
         git_sha = 'unknown'
 
+    # Debug: positions table stats
+    pos_total = db.execute("SELECT COUNT(*) FROM positions").fetchone()[0]
+    pos_active = db.execute("SELECT COUNT(*) FROM positions WHERE whale_shares > 0").fetchone()[0]
+    closed = db.execute("SELECT COUNT(*) FROM closed_markets").fetchone()[0]
+
     return {
         "status": "ok",
         "wallets": wallet_count,
         "db_persisted": db_exists,
+        "positions_total": pos_total,
+        "positions_active": pos_active,
+        "closed_markets": closed,
         "version": "2.0.0",
         "phase": "position-mirroring",
         "git_sha": git_sha

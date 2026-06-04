@@ -44,7 +44,7 @@ MAX_OPEN_POSITIONS = 10     # Concurrent positions cap
 
 # Risk controls
 SLIPPAGE_LIMIT = 0.02       # 2% max slippage
-PRICE_DEVIATION_LIMIT = 0.05  # 5% from whale entry price
+PRICE_DEVIATION_LIMIT = 0.10  # 10% from whale entry (position mirroring tolerates more drift than per-trade copying)
 DAILY_LOSS_LIMIT = 25.00    # Per wallet daily loss cap
 WALLET_LOSS_THRESHOLD = 0.25  # 25% cumulative = pause
 CONSECUTIVE_FAILURES = 5    # Pause after N consecutive fails

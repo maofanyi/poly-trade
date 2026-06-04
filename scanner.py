@@ -65,7 +65,7 @@ def update_position(db, wallet_id: int, trade: dict):
         return
 
     row = db.execute(
-        "SELECT whale_shares FROM positions WHERE wallet_id = ? AND slug = ? AND outcome = ?",
+        "SELECT whale_shares, avg_cost FROM positions WHERE wallet_id = ? AND slug = ? AND outcome = ?",
         (wallet_id, slug, outcome)
     ).fetchone()
 
@@ -76,14 +76,24 @@ def update_position(db, wallet_id: int, trade: dict):
     else:
         new_whale = max(0.0, current - size)
 
+    # Track whale's average entry price (BUY only)
+    price = float(trade.get('price', 0))
+    if side == 'BUY' and price > 0:
+        old_cost = row['avg_cost'] if row else 0.0
+        old_shares = row['whale_shares'] if row else 0.0
+        new_cost = ((old_cost * old_shares) + (price * size)) / new_whale if new_whale > 0 else 0
+    else:
+        new_cost = row['avg_cost'] if row else 0.0
+
     db.execute("""
-        INSERT INTO positions (wallet_id, slug, outcome, whale_shares, last_trade_ts)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO positions (wallet_id, slug, outcome, whale_shares, avg_cost, last_trade_ts)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(wallet_id, slug, outcome) DO UPDATE SET
             whale_shares = excluded.whale_shares,
+            avg_cost = excluded.avg_cost,
             last_trade_ts = excluded.last_trade_ts,
             updated_at = datetime('now','localtime')
-    """, (wallet_id, slug, outcome, new_whale, ts))
+    """, (wallet_id, slug, outcome, new_whale, new_cost, ts))
     db.commit()
 
 
@@ -120,8 +130,13 @@ def risk_check(db, wallet_name: str, slug: str, side: str, amount: float,
     if side == 'BUY' and existing_usd + amount > MAX_PER_MARKET_USD:
         return False, 'per_market_cap'
 
-    # Price deviation check
-    if mid and whale_price > 0:
+    # Price deviation check — only for existing positions we're adjusting.
+    # First-time BUY takes current market price; whale's entry price is informational.
+    existing_shares = sum(
+        p.get('shares', 0) for p in portfolio
+        if p.get('slug') == slug and p.get('outcome', '').lower() == outcome.lower()
+    )
+    if mid and whale_price > 0 and existing_shares > 0:
         deviation = abs(current_price - whale_price) / whale_price
         if deviation > PRICE_DEVIATION_LIMIT:
             return False, 'price_gap'
@@ -403,11 +418,21 @@ def scan_wallet_position_sync(db, wallet: dict) -> int:
     actions = compute_diffs(db, wallet_id, wallet_name)
     executed = 0
     for a in actions:
+        # Get whale entry price from positions table; fall back to current mid price
+        pos_row = db.execute(
+            "SELECT avg_cost FROM positions WHERE wallet_id = ? AND slug = ? AND outcome = ?",
+            (wallet_id, a['slug'], a['outcome'])
+        ).fetchone()
+        if pos_row and pos_row['avg_cost'] and pos_row['avg_cost'] > 0:
+            whale_ref_price = pos_row['avg_cost']
+        else:
+            mid = get_midpoint(a['slug'])
+            whale_ref_price = mid.get('YES', mid.get('yes', 0.5)) if mid else 0.5
         passed, reason = risk_check(db, wallet_name, a['slug'], a['action'],
-                                    a['amount'], 0.5, a.get('outcome', 'Yes'))
+                                    a['amount'], whale_ref_price, a.get('outcome', 'Yes'))
         if not passed:
             log_trade(db, wallet_id,
-                      txn_hash=f"risk_{a['slug']}_{a['outcome']}_{int(time.time())}",
+                      txn_hash=f"risk_{a['slug']}_{a['outcome']}_{int(time.time()*1000000)}",
                       side=a['action'], size=a['amount'], whale_price=0.5,
                       sim_usd=0, fill_price=None, status='SKIPPED',
                       slippage=0, pnl_realized=0,
@@ -423,7 +448,7 @@ def scan_wallet_position_sync(db, wallet: dict) -> int:
         if result and result.get('ok'):
             fill_data = result.get('data', {}).get('trade', {})
             log_trade(db, wallet_id,
-                      txn_hash=f"sync_{a['slug']}_{a['outcome']}_{int(time.time())}",
+                      txn_hash=f"sync_{a['slug']}_{a['outcome']}_{int(time.time()*1000000)}",
                       side=a['action'], size=a['amount'], whale_price=0.5,
                       sim_usd=a['amount'],
                       fill_price=fill_data.get('avg_price'),
@@ -438,7 +463,7 @@ def scan_wallet_position_sync(db, wallet: dict) -> int:
             # Mark failed/not-found markets as closed so we don't retry dead markets
             _mark_market_closed(db, a['slug'])
             log_trade(db, wallet_id,
-                      txn_hash=f"err_{a['slug']}_{a['outcome']}_{int(time.time())}",
+                      txn_hash=f"err_{a['slug']}_{a['outcome']}_{int(time.time()*1000000)}",
                       side=a['action'], size=a['amount'], whale_price=0.5,
                       sim_usd=0, fill_price=None, status=status,
                       slippage=0, pnl_realized=0,

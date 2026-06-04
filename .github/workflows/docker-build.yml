@@ -23,7 +23,7 @@ jobs:
           pip install fastapi 'uvicorn[standard]' polymarket-paper-trader
           pip install pytest pytest-asyncio httpx
       - name: Run backend tests
-        run: python -m pytest tests/ --ignore=tests/e2e -v --tb=short
+        run: python -m pytest tests/ --ignore=tests/e2e --ignore=tests/test_local_longrun.py -v --tb=short
 
   build:
     needs: test

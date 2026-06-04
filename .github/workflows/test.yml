@@ -23,7 +23,7 @@ jobs:
           pip install pytest pytest-asyncio httpx
 
       - name: Run backend tests
-        run: python -m pytest tests/ --ignore=tests/e2e -v --tb=short
+        run: python -m pytest tests/ --ignore=tests/e2e --ignore=tests/test_local_longrun.py -v --tb=short
 
   e2e:
     runs-on: ubuntu-latest

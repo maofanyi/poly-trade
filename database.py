@@ -213,20 +213,21 @@ def backfill_positions():
                 delta = size
             else:
                 delta = -size
+            # whale_shares tracks the whale's net position from trade_log.
+            # our_shares stays 0 — our actual holdings come from pm-trader (get_portfolio).
             db.execute("""
                 INSERT INTO positions (wallet_id, slug, outcome, whale_shares, our_shares, avg_cost, last_trade_ts)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, 0, ?, ?)
                 ON CONFLICT(wallet_id, slug, outcome) DO UPDATE SET
                     whale_shares = whale_shares + ?,
-                    our_shares = our_shares + ?,
-                    avg_cost = CASE WHEN our_shares + ? > 0
-                        THEN (avg_cost * our_shares + ? * ?) / (our_shares + ?)
+                    avg_cost = CASE WHEN whale_shares + ? > 0
+                        THEN (avg_cost * whale_shares + ? * ?) / (whale_shares + ?)
                         ELSE ? END,
                     last_trade_ts = MAX(last_trade_ts, ?),
                     updated_at = datetime('now','localtime')
-            """, (w['id'], slug, outcome, max(delta, 0), max(delta, 0), price, ts,
-                  max(delta, 0), max(delta, 0),
-                  size, price, size, size, price,
+            """, (w['id'], slug, outcome, max(delta, 0), price, ts,
+                  max(delta, 0),
+                  max(delta, 0), price, size, max(delta, 0), price,
                   ts))
     db.execute("""
         UPDATE wallets SET started_at = (

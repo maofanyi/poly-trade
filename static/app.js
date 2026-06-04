@@ -14,6 +14,7 @@ import PortfolioPanel from './components/PortfolioPanel.js';
 import TradeDetailModal from './components/TradeDetailModal.js';
 import WalletCompareChart from './components/WalletCompareChart.js';
 import SuccessRatePanel from './components/SuccessRatePanel.js';
+import RiskPanel from './components/RiskPanel.js';
 
 const API = '/api';
 
@@ -197,5 +198,6 @@ app.component('PortfolioPanel', PortfolioPanel);
 app.component('TradeDetailModal', TradeDetailModal);
 app.component('WalletCompareChart', WalletCompareChart);
 app.component('SuccessRatePanel', SuccessRatePanel);
+app.component('risk-panel', RiskPanel);
 
 app.mount('#app');

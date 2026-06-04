@@ -31,6 +31,12 @@ async def lifespan(app: FastAPI):
             )
         db.commit()
         print(f"Seeded {len(DEFAULT_WALLETS)} default wallets")
+    # One-time backfill: populate positions table from existing trade_log
+    row = db.execute("SELECT COUNT(*) as cnt FROM positions").fetchone()
+    if row['cnt'] == 0:
+        from database import backfill_positions
+        backfill_positions()
+        print("Backfilled positions from trade_log")
     # Ensure alert_config row exists
     db.execute("INSERT OR IGNORE INTO alert_config (id) VALUES (1)")
     db.commit()

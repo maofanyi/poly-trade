@@ -43,7 +43,7 @@ class TestOtherConfig:
         if "config" in sys.modules:
             del sys.modules["config"]
         from config import SCAN_INTERVAL
-        assert SCAN_INTERVAL == 120
+        assert SCAN_INTERVAL == 5
 
     def test_scan_interval_env(self, monkeypatch):
         monkeypatch.setenv("SCAN_INTERVAL", "60")

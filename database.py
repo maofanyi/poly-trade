@@ -146,6 +146,20 @@ def init_db():
             detected_at TEXT DEFAULT (datetime('now','localtime'))
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS positions (
+            id INTEGER PRIMARY KEY,
+            wallet_id INTEGER REFERENCES wallets(id),
+            slug TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            whale_shares REAL DEFAULT 0,
+            our_shares REAL DEFAULT 0,
+            avg_cost REAL DEFAULT 0,
+            last_trade_ts TEXT,
+            updated_at TEXT DEFAULT (datetime('now','localtime')),
+            UNIQUE(wallet_id, slug, outcome)
+        )
+    """)
     # No explicit commit — CREATE TABLE IF NOT EXISTS is DDL that
     # auto-commits when it actually creates a table.  When tables already
     # exist it is a no-op, so active SAVEPOINTs survive.  An explicit
@@ -167,3 +181,57 @@ def migrate():
     if 'monitor_start' not in alert_cols:
         db.execute("ALTER TABLE alert_config ADD COLUMN monitor_start INTEGER")
         db.commit()
+    wallet_cols = [r[1] for r in db.execute("PRAGMA table_info(wallets)").fetchall()]
+    if 'started_at' not in wallet_cols:
+        db.execute("ALTER TABLE wallets ADD COLUMN started_at TEXT")
+        db.commit()
+
+
+def backfill_positions():
+    """One-time backfill of positions table from existing trade_log."""
+    db = get_db()
+    wallets = db.execute("SELECT id FROM wallets WHERE active = 1").fetchall()
+    for w in wallets:
+        trades = db.execute("""
+            SELECT slug, outcome, side, fill_price, size, sim_usd, timestamp
+            FROM trade_log
+            WHERE wallet_id = ? AND status = 'FILLED'
+            ORDER BY id ASC
+        """, (w['id'],)).fetchall()
+        for t in trades:
+            slug = t['slug'] or ''
+            outcome = t['outcome'] or ''
+            if not slug or not outcome:
+                continue
+            side = (t['side'] or 'BUY').upper()
+            size = float(t['size'] or 0)
+            price = float(t['fill_price'] or 0)
+            ts = t['timestamp'] or ''
+            if side == 'BUY':
+                delta = size
+            else:
+                delta = -size
+            db.execute("""
+                INSERT INTO positions (wallet_id, slug, outcome, whale_shares, our_shares, avg_cost, last_trade_ts)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(wallet_id, slug, outcome) DO UPDATE SET
+                    whale_shares = whale_shares + ?,
+                    our_shares = our_shares + ?,
+                    avg_cost = CASE WHEN our_shares + ? > 0
+                        THEN (avg_cost * our_shares + ? * ?) / (our_shares + ?)
+                        ELSE ? END,
+                    last_trade_ts = MAX(last_trade_ts, ?),
+                    updated_at = datetime('now','localtime')
+            """, (w['id'], slug, outcome, max(delta, 0), max(delta, 0), price, ts,
+                  max(delta, 0), max(delta, 0),
+                  size, price, size, size, price,
+                  ts))
+    db.execute("""
+        UPDATE wallets SET started_at = (
+            SELECT MIN(timestamp) FROM trade_log
+            WHERE trade_log.wallet_id = wallets.id AND status = 'FILLED'
+        ) WHERE started_at IS NULL
+          AND id IN (SELECT DISTINCT wallet_id FROM trade_log WHERE status = 'FILLED')
+    """)
+    db.execute("UPDATE wallets SET started_at = created_at WHERE started_at IS NULL")
+    db.commit()

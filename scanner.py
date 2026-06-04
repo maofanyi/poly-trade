@@ -3,10 +3,13 @@ import json
 import time
 import urllib.request
 from datetime import datetime
-from config import DATA_API, INITIAL_CAPITAL, MAX_TRADES_PER_SCAN, SCAN_INTERVAL
+from config import (DATA_API, INITIAL_CAPITAL, MAX_TRADES_PER_SCAN, SCAN_INTERVAL,
+                    MIN_TRADE_USD, MAX_PER_MARKET_USD, MAX_OPEN_POSITIONS,
+                    PRICE_DEVIATION_LIMIT, DAILY_LOSS_LIMIT, COPY_RATIO,
+                    GLOBAL_LOSS_THRESHOLD)
 from database import get_db
 import re
-from trader import ensure_account, place_market_order, has_position, get_portfolio
+from trader import ensure_account, place_market_order, get_portfolio, get_midpoint
 
 # Deferred import to avoid circular dependency
 _ws_manager = None
@@ -49,6 +52,148 @@ def get_cost_basis(db, wallet_id: int, slug: str) -> tuple[float, float]:
     if row and row['fill_price']:
         return (row['fill_price'], row['size'] or 0)
     return (0, 0)
+
+def update_position(db, wallet_id: int, trade: dict):
+    """Accumulate whale position from a single trade."""
+    slug = trade.get('slug', '')
+    outcome = trade.get('outcome', '')
+    side = (trade.get('side', 'BUY') or 'BUY').upper()
+    size = float(trade.get('size', 0))
+    ts = str(trade.get('timestamp', ''))
+
+    if not slug or not outcome or size <= 0:
+        return
+
+    row = db.execute(
+        "SELECT whale_shares FROM positions WHERE wallet_id = ? AND slug = ? AND outcome = ?",
+        (wallet_id, slug, outcome)
+    ).fetchone()
+
+    current = row['whale_shares'] if row else 0.0
+
+    if side == 'BUY':
+        new_whale = current + size
+    else:
+        new_whale = max(0.0, current - size)
+
+    db.execute("""
+        INSERT INTO positions (wallet_id, slug, outcome, whale_shares, last_trade_ts)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(wallet_id, slug, outcome) DO UPDATE SET
+            whale_shares = excluded.whale_shares,
+            last_trade_ts = excluded.last_trade_ts,
+            updated_at = datetime('now','localtime')
+    """, (wallet_id, slug, outcome, new_whale, ts))
+    db.commit()
+
+
+def get_whale_positions(db, wallet_id: int) -> list:
+    """Return all current whale positions for a wallet (shares > 0)."""
+    rows = db.execute(
+        "SELECT slug, outcome, whale_shares FROM positions WHERE wallet_id = ? AND whale_shares > 0",
+        (wallet_id,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def risk_check(db, wallet_name: str, slug: str, side: str, amount: float,
+               whale_price: float, outcome: str = 'Yes') -> tuple:
+    """Return (passed: bool, skip_reason: str)."""
+    if amount < MIN_TRADE_USD:
+        return False, 'size_too_small'
+
+    # Check open positions count
+    portfolio = get_portfolio(f"copy-{wallet_name}")
+    if len(portfolio) >= MAX_OPEN_POSITIONS and side == 'BUY':
+        return False, 'max_positions'
+
+    # Check per-market cap via portfolio
+    mid = get_midpoint(slug)
+    current_price = 0.5
+    if mid:
+        current_price = mid.get('YES', mid.get('yes', 0.5))
+
+    existing_usd = 0.0
+    for p in portfolio:
+        if p.get('slug') == slug:
+            existing_usd += p.get('shares', 0) * current_price
+    if side == 'BUY' and existing_usd + amount > MAX_PER_MARKET_USD:
+        return False, 'per_market_cap'
+
+    # Price deviation check
+    if mid and whale_price > 0:
+        deviation = abs(current_price - whale_price) / whale_price
+        if deviation > PRICE_DEVIATION_LIMIT:
+            return False, 'price_gap'
+
+    # Daily loss check
+    wallet_row = db.execute(
+        "SELECT id FROM wallets WHERE name = ?", (wallet_name,)
+    ).fetchone()
+    if wallet_row:
+        today = datetime.now().strftime('%Y-%m-%d')
+        row = db.execute(
+            "SELECT COALESCE(SUM(pnl_realized), 0) as daily_loss FROM trade_log "
+            "WHERE wallet_id = ? AND pnl_realized < 0 AND timestamp >= ?",
+            (wallet_row['id'], today)
+        ).fetchone()
+        if row and abs(row['daily_loss']) > DAILY_LOSS_LIMIT:
+            return False, 'daily_limit'
+
+    return True, ''
+
+
+def compute_diffs(db, wallet_id: int, wallet_name: str) -> list:
+    """Compare whale positions vs our positions, return list of trade actions."""
+    whale_positions = get_whale_positions(db, wallet_id)
+    our_positions = get_portfolio(f"copy-{wallet_name}")
+
+    # Index our positions by slug|outcome
+    ours = {}
+    for p in our_positions:
+        key = f"{p['slug']}|{p['outcome']}"
+        ours[key] = p
+
+    actions = []
+
+    # Whale positions -> check what we should hold
+    for wp in whale_positions:
+        key = f"{wp['slug']}|{wp['outcome']}"
+        our_shares = ours.get(key, {}).get('shares', 0)
+
+        if wp['whale_shares'] > 0 and our_shares == 0:
+            # New position: BUY proportional amount
+            mid = get_midpoint(wp['slug'])
+            est_price = 0.5
+            if mid:
+                est_price = mid.get('YES', mid.get('yes', 0.5))
+            whale_notional = wp['whale_shares'] * est_price
+            amount = min(max(whale_notional * COPY_RATIO, 1.0), MAX_PER_MARKET_USD)
+            actions.append({
+                'slug': wp['slug'], 'outcome': wp['outcome'],
+                'action': 'BUY', 'amount': round(amount, 2)
+            })
+        elif wp['whale_shares'] == 0 and our_shares > 0:
+            actions.append({
+                'slug': wp['slug'], 'outcome': wp['outcome'],
+                'action': 'SELL', 'amount': our_shares
+            })
+
+    # We hold positions that whale doesn't -> SELL
+    for key, op in ours.items():
+        slug, outcome = key.split('|', 1)
+        whale_has = any(
+            wp['slug'] == slug and wp['outcome'] == outcome
+            for wp in whale_positions
+        )
+        if not whale_has and op.get('shares', 0) > 0:
+            actions.append({
+                'slug': slug, 'outcome': outcome,
+                'action': 'SELL', 'amount': op['shares']
+            })
+
+    return actions
+
 
 def _resolve_expired_positions(acct_name: str) -> float:
     """Query Gamma API to resolve expired positions. Returns adjustment to total_value."""
@@ -190,232 +335,220 @@ def _mark_market_closed(db, slug: str):
     db.commit()
 
 
-def scan_wallet(db, wallet: dict, ms: int) -> int:
-    """Scan one wallet for new trades. Returns count of new trades processed."""
-    wallet_id = get_wallet_id(db, wallet['name'])
-    if not wallet_id:
+def scan_wallet_position_sync(db, wallet: dict) -> int:
+    """Fetch wallet trades, update position model, compute diffs, execute."""
+    wallet_id = wallet['id']
+    wallet_name = wallet['name']
+
+    # Check paused
+    row = db.execute("SELECT paused FROM wallets WHERE id = ?", (wallet_id,)).fetchone()
+    if row and row['paused']:
         return 0
 
-    # Check if wallet is paused
-    paused_row = db.execute("SELECT paused FROM wallets WHERE id = ?", (wallet_id,)).fetchone()
-    if paused_row and paused_row['paused']:
-        return 0  # Skip this wallet entirely
-
+    # Fetch recent trades (limit 50 to cover window)
     try:
-        trades = api_fetch(f"{DATA_API}/trades?user={wallet['address']}&limit=15")
+        trades = api_fetch(f"{DATA_API}/trades?user={wallet['address']}&limit=50")
     except Exception as e:
-        print(f"  [{wallet['name']}] API error: {e}")
+        print(f"  [{wallet_name}] API error: {e}")
         return 0
 
-    new_trades = []
-    for t in (trades or []):
-        txn_hash = t.get('transactionHash', '')
-        if not txn_hash or is_txn_seen(db, txn_hash):
+    if not trades:
+        return 0
+
+    new_count = 0
+    skipped_txn_hashes = set()
+    for t in trades:
+        txn = t.get('transactionHash', '')
+        if not txn or txn in skipped_txn_hashes:
             continue
-        trade_ts = int(t.get('timestamp', 0))
-        if ms and ms > 0 and trade_ts < ms:
-            # Mark as seen (skip historical)
-            db.execute("INSERT OR IGNORE INTO trade_log (wallet_id, txn_hash, side, size, whale_price, sim_usd, status, slug, outcome) VALUES (?,?,?,?,?,0,'HISTORICAL',?,?)",
-                       (wallet_id, txn_hash, t.get('side','?'), float(t.get('size',0)), float(t.get('price',0)), t.get('slug',''), t.get('outcome','?')))
-            db.commit()
-            continue
-        new_trades.append(t)
+        skipped_txn_hashes.add(txn)
 
-    if len(new_trades) > MAX_TRADES_PER_SCAN:
-        new_trades = new_trades[-MAX_TRADES_PER_SCAN:]
-
-    acct = f"copy-{wallet['name']}"
-    processed = 0
-    filled_count = 0
-
-    for tr in new_trades:
-        side = tr.get('side', 'BUY').upper()
-        slug = tr.get('slug', '')
-        outcome = tr.get('outcome', 'Yes')
-        size = float(tr.get('size', 0))
-        whale_price = float(tr.get('price', 0.5))
-        txn_hash = tr.get('transactionHash', '')
-
-        whale_notional = size * whale_price
-        sim_usd = round(min(max(whale_notional * 0.02, 1.0), INITIAL_CAPITAL * 0.05), 2)
-
-        ts = tr.get('timestamp', '')
-        try:
-            ts = datetime.utcfromtimestamp(int(ts)).isoformat() if ts else datetime.now().isoformat()
-        except Exception:
-            ts = datetime.now().isoformat()
-
-        pre_bal = ensure_account(acct)
-        trade_side = 'buy' if side == 'BUY' else 'sell'
-
-        # Position dedup: skip BUY if we already hold this market+outcome
-        if side == 'BUY' and has_position(acct, slug, outcome):
-            log_trade(db, wallet_id,
-                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
-                      sim_usd=0, fill_price=None, status='SKIPPED',
-                      slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts, skip_reason='already_holding')
-            print(f"    {side} SKIP (already holding {outcome} in {slug[:30]})")
-            processed += 1
-            continue
-
-        # SELL guard: skip if we don't hold this position
-        if side == 'SELL' and not has_position(acct, slug, outcome):
-            log_trade(db, wallet_id,
-                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
-                      sim_usd=0, fill_price=None, status='SKIPPED',
-                      slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts, skip_reason='no_position')
-            print(f"    {side} SKIP (no position to sell for {outcome} in {slug[:30]})")
-            processed += 1
-            continue
-
-        # Expiry check: skip markets expiring within 1 hour
-        if _is_market_expiring(slug, 3600):
-            log_trade(db, wallet_id,
-                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
-                      sim_usd=0, fill_price=None, status='SKIPPED',
-                      slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts, skip_reason='expiring_soon')
-            expiry_ts = _extract_expiry(slug)
-            print(f"    {side} SKIP (market expires soon, ts={expiry_ts})")
-            processed += 1
-            continue
-
-        # Skip known closed markets
-        if _is_market_closed(db, slug):
-            log_trade(db, wallet_id,
-                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
-                      sim_usd=0, fill_price=None, status='SKIPPED',
-                      slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts, skip_reason='market_closed')
-            print(f"    {side} SKIP (market closed: {slug[:30]})")
-            processed += 1
-            continue
-
-        result = place_market_order(acct, slug, outcome, trade_side, sim_usd)
-        post_bal = ensure_account(acct)
-
-        if result and result.get('ok') and result.get('data', {}).get('trade'):
-            td = result['data']['trade']
-            fill_price = td.get('avg_price', whale_price)
-            fill_shares = td.get('shares', 0)
-
-            # Price sanity check: skip if fill deviates >30% from whale (stale/expired market)
-            price_gap_pct = abs(fill_price - whale_price) / whale_price * 100 if whale_price > 0 else 0
-            if price_gap_pct > 30:
-                log_trade(db, wallet_id,
-                          txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
-                          sim_usd=0, fill_price=fill_price, status='SKIPPED',
-                          slippage=round(price_gap_pct, 2), pnl_realized=0,
-                          slug=slug, outcome=outcome, timestamp=ts, skip_reason='price_gap')
-                print(f"    {side} SKIP (price gap {price_gap_pct:.0f}%: whale={whale_price:.4f} fill={fill_price:.4f})")
-                processed += 1
+        # Skip if this trade is older than our last update for this position
+        trade_ts = str(t.get('timestamp', ''))
+        slug = t.get('slug', '')
+        outcome = t.get('outcome', '')
+        if slug and outcome:
+            pos_row = db.execute(
+                "SELECT last_trade_ts FROM positions WHERE wallet_id = ? AND slug = ? AND outcome = ?",
+                (wallet_id, slug, outcome)
+            ).fetchone()
+            if pos_row and pos_row['last_trade_ts'] and trade_ts <= pos_row['last_trade_ts']:
                 continue
 
-            # Compute slippage: absolute price difference
-            fill_slippage = round(abs(fill_price - whale_price), 6)
+        update_position(db, wallet_id, t)
+        # Log to trade_log for audit
+        side = (t.get('side', 'BUY') or 'BUY').upper()
+        log_trade(db, wallet_id,
+                  txn_hash=txn,
+                  side=side,
+                  size=float(t.get('size', 0)),
+                  whale_price=float(t.get('price', 0.5)),
+                  sim_usd=0,
+                  fill_price=None,
+                  status='SYNCED',
+                  slippage=0,
+                  pnl_realized=0,
+                  slug=slug,
+                  outcome=outcome,
+                  timestamp=datetime.now().isoformat())
+        new_count += 1
 
-            pnl_realized = 0.0
-            if side == 'SELL':
-                cost, _ = get_cost_basis(db, wallet_id, slug)
-                pnl_realized = round((fill_price - cost) * fill_shares, 2) if cost > 0 else 0.0
+    if new_count > 0:
+        # Compute diffs and execute
+        actions = compute_diffs(db, wallet_id, wallet_name)
+        executed = 0
+        for a in actions:
+            passed, reason = risk_check(db, wallet_name, a['slug'], a['action'],
+                                        a['amount'], 0.5, a.get('outcome', 'Yes'))
+            if not passed:
+                log_trade(db, wallet_id,
+                          txn_hash=f"risk_{a['slug']}_{a['outcome']}_{int(time.time())}",
+                          side=a['action'], size=a['amount'], whale_price=0.5,
+                          sim_usd=0, fill_price=None, status='SKIPPED',
+                          slippage=0, pnl_realized=0,
+                          slug=a['slug'], outcome=a['outcome'],
+                          timestamp=datetime.now().isoformat(),
+                          skip_reason=reason)
+                continue
 
-            log_trade(db, wallet_id,
-                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
-                      sim_usd=sim_usd, fill_price=fill_price, status='FILLED',
-                      slippage=fill_slippage, pnl_realized=pnl_realized,
-                      slug=slug, outcome=outcome, timestamp=ts)
-            print(f"    {side} ${sim_usd:.2f} FILLED @ {fill_price} (whale={whale_price})")
-            filled_count += 1
-        else:
-            err = str(result.get('error', '')) if result else 'no response'
-            status = 'SKIPPED' if ('not found' in err.lower() or 'MARKET_NOT_FOUND' in err) else 'FAILED'
-            skip_reason = 'market_not_found' if status == 'SKIPPED' else 'error'
-            if status == 'SKIPPED':
-                _mark_market_closed(db, slug)
-            log_trade(db, wallet_id,
-                      txn_hash=txn_hash, side=side, size=size, whale_price=whale_price,
-                      sim_usd=0, fill_price=None, status=status,
-                      slippage=0, pnl_realized=0,
-                      slug=slug, outcome=outcome, timestamp=ts, skip_reason=skip_reason)
-            print(f"    {side} ${sim_usd:.2f} {status} ({err[:40]})")
+            side_str = 'buy' if a['action'] == 'BUY' else 'sell'
+            result = place_market_order(f"copy-{wallet_name}", a['slug'], a['outcome'],
+                                        side_str, a['amount'])
 
-        processed += 1
+            if result and result.get('ok'):
+                fill_data = result.get('data', {}).get('trade', {})
+                log_trade(db, wallet_id,
+                          txn_hash=f"sync_{a['slug']}_{a['outcome']}_{int(time.time())}",
+                          side=a['action'], size=a['amount'], whale_price=0.5,
+                          sim_usd=a['amount'],
+                          fill_price=fill_data.get('avg_price'),
+                          status='FILLED', slippage=0,
+                          pnl_realized=0, slug=a['slug'], outcome=a['outcome'],
+                          timestamp=datetime.now().isoformat())
+                executed += 1
+            else:
+                err = str(result.get('error', 'no response')) if result else 'no response'
+                status = 'SKIPPED' if ('not found' in err.lower() or 'MARKET_NOT_FOUND' in err) else 'FAILED'
+                reason2 = 'market_not_found' if status == 'SKIPPED' else 'error'
+                log_trade(db, wallet_id,
+                          txn_hash=f"err_{a['slug']}_{a['outcome']}_{int(time.time())}",
+                          side=a['action'], size=a['amount'], whale_price=0.5,
+                          sim_usd=0, fill_price=None, status=status,
+                          slippage=0, pnl_realized=0,
+                          slug=a['slug'], outcome=a['outcome'],
+                          timestamp=datetime.now().isoformat(),
+                          skip_reason=reason2)
 
-    if filled_count > 0:
-        snapshot_pnl(db, wallet_id, acct)
+        if executed > 0:
+            snapshot_pnl(db, wallet_id, f"copy-{wallet_name}")
 
-    return processed
+    return new_count
+
+def _check_global_loss(db):
+    """Pause all wallets if total portfolio loss > GLOBAL_LOSS_THRESHOLD."""
+    wallets = db.execute(
+        "SELECT id, name FROM wallets WHERE active = 1 AND paused = 0"
+    ).fetchall()
+    total_value = 0.0
+    active_count = 0
+    for w in wallets:
+        pnl = db.execute(
+            "SELECT total_value FROM pnl_snapshots WHERE wallet_id = ? ORDER BY id DESC LIMIT 1",
+            (w['id'],)
+        ).fetchone()
+        if pnl:
+            total_value += pnl['total_value']
+            active_count += 1
+    if active_count > 0:
+        total_capital = INITIAL_CAPITAL * active_count
+        loss_pct = (total_capital - total_value) / total_capital
+        if loss_pct > GLOBAL_LOSS_THRESHOLD:
+            db.execute("UPDATE wallets SET paused = 1 WHERE active = 1")
+            db.commit()
+            print(f"  !! GLOBAL CIRCUIT BREAKER: loss {loss_pct*100:.1f}%")
+
+
+def _broadcast_pnl(db, wallets):
+    """Send P&L update via WebSocket."""
+    pnl_data = []
+    for w in wallets:
+        row = db.execute(
+            "SELECT * FROM pnl_snapshots WHERE wallet_id = ? ORDER BY id DESC LIMIT 1",
+            (w["id"],)
+        ).fetchone()
+        if row:
+            pnl_data.append({
+                "name": w["name"], "wallet_id": w["id"],
+                "cash": row["cash"], "total_value": row["total_value"],
+                "pnl": row["pnl"], "pnl_pct": row["pnl_pct"]
+            })
+    if pnl_data:
+        try:
+            import asyncio as _asyncio
+            _asyncio.run(_ws_manager.broadcast({"type": "pnl_update", "wallets": pnl_data}))
+        except Exception:
+            pass
+
 
 def scan_loop():
-    """Background thread: continuously scan all active wallets for new trades."""
+    """Position mirroring loop — 5s interval, sync whale positions to ours."""
     db = get_db()
-
-    # Persistent monitor_start — survives container restarts.
-    # Only set on very first run; subsequent restarts reuse the original.
-    row = db.execute("SELECT monitor_start FROM alert_config WHERE id = 1").fetchone()
-    if row and row['monitor_start']:
-        monitor_start = row['monitor_start']
-    else:
-        monitor_start = int(datetime.now().timestamp())
-        db.execute("UPDATE alert_config SET monitor_start = ? WHERE id = 1", (monitor_start,))
-        db.commit()
-
-    print(f"Scanner started. Monitor start: {monitor_start} (persisted)")
     scan_num = 0
+
+    # Set started_at for wallets that have traded but don't have it set
+    db.execute("""
+        UPDATE wallets SET started_at = (
+            SELECT MIN(timestamp) FROM trade_log
+            WHERE trade_log.wallet_id = wallets.id AND status = 'FILLED'
+        ) WHERE started_at IS NULL
+          AND id IN (SELECT DISTINCT wallet_id FROM trade_log WHERE status = 'FILLED')
+    """)
+    db.execute("UPDATE wallets SET started_at = created_at WHERE started_at IS NULL")
+    db.commit()
+
+    print(f"Scanner started. Position mirroring mode. Interval: {SCAN_INTERVAL}s")
 
     while True:
         try:
             scan_num += 1
             scan_start = datetime.now()
-            print(f"\n--- Scan #{scan_num} {scan_start.strftime('%H:%M:%S')} ---")
 
-            # Reconnect to DB in case connection was lost
             db = get_db()
-            db.execute("INSERT INTO scan_log (scan_start) VALUES (?)", (scan_start.isoformat(),))
+            db.execute("INSERT INTO scan_log (scan_start) VALUES (?)",
+                       (scan_start.isoformat(),))
             db.commit()
             scan_log_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-            wallets = db.execute("SELECT * FROM wallets WHERE active = 1").fetchall()
+            wallets = db.execute(
+                "SELECT id, name, address, category FROM wallets WHERE active = 1"
+            ).fetchall()
             total_new = 0
 
             for w in wallets:
                 try:
-                    wallet_dict = {"address": w['address'], "name": w['name'], "category": w['category']}
-                    total_new += scan_wallet(db, wallet_dict, monitor_start)
+                    total_new += scan_wallet_position_sync(db, dict(w))
                 except Exception as e:
                     print(f"  [{w['name']}] scan error: {e}")
 
             scan_end = datetime.now()
             elapsed = (scan_end - scan_start).total_seconds()
-            db.execute("UPDATE scan_log SET scan_end=?, new_trades_found=?, status=? WHERE id=?",
-                       (scan_end.isoformat(), total_new, 'ok', scan_log_id))
+            db.execute(
+                "UPDATE scan_log SET scan_end=?, new_trades_found=?, status=? WHERE id=?",
+                (scan_end.isoformat(), total_new, 'ok', scan_log_id)
+            )
             db.commit()
 
-            print(f"  Scan done in {elapsed:.1f}s | New trades: {total_new}")
+            # Check global loss threshold
+            _check_global_loss(db)
 
             # Broadcast P&L update via WebSocket
             if _ws_manager:
-                pnl_data = []
-                for w_row in wallets:
-                    pnl_row = db.execute(
-                        "SELECT * FROM pnl_snapshots WHERE wallet_id=? ORDER BY id DESC LIMIT 1",
-                        (w_row["id"],)
-                    ).fetchone()
-                    if pnl_row:
-                        pnl_data.append({"name": w_row["name"], "wallet_id": w_row["id"],
-                                         "cash": pnl_row["cash"], "total_value": pnl_row["total_value"],
-                                         "pnl": pnl_row["pnl"], "pnl_pct": pnl_row["pnl_pct"]})
-                try:
-                    import asyncio as _asyncio
-                    _asyncio.run(_ws_manager.broadcast({"type": "pnl_update", "wallets": pnl_data}))
-                except Exception:
-                    pass
+                _broadcast_pnl(db, wallets)
 
-            print(f"  Next scan in {SCAN_INTERVAL}s...")
+            print(f"  Scan #{scan_num} done in {elapsed:.1f}s | Updates: {total_new}")
         except Exception as e:
             import traceback
             print(f"  !! Scanner error (will retry): {e}")
             traceback.print_exc()
+
         time.sleep(SCAN_INTERVAL)

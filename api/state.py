@@ -2,11 +2,32 @@
 import urllib.request, urllib.parse
 from fastapi import APIRouter
 from database import get_db
-from config import INITIAL_CAPITAL
+from config import INITIAL_CAPITAL, MAX_OPEN_POSITIONS, MAX_PER_MARKET_USD, DAILY_LOSS_LIMIT, GLOBAL_LOSS_THRESHOLD
 from models import AlertConfigUpdate
 from alerts import update_config as alerts_update_config
 
 router = APIRouter(prefix="/api", tags=["state"])
+
+
+def _count_risk(db, sql):
+    row = db.execute(sql).fetchone()
+    return row[0] if row else 0
+
+
+def _today_loss(db):
+    from datetime import datetime
+    today = datetime.now().strftime('%Y-%m-%d')
+    row = db.execute(
+        "SELECT COALESCE(SUM(pnl_realized), 0) FROM trade_log WHERE pnl_realized < 0 AND timestamp >= ?",
+        (today,)
+    ).fetchone()
+    return round(abs(row[0]) if row else 0, 2)
+
+
+def _circuit_breaker_active(db):
+    paused = db.execute("SELECT COUNT(*) FROM wallets WHERE paused = 1 AND active = 1").fetchone()[0]
+    return paused > 0
+
 
 @router.get("/state")
 def get_state():
@@ -28,6 +49,8 @@ def get_state():
                 "id": w["id"], "address": w["address"], "name": w["name"],
                 "category": w["category"], "active": bool(w["active"]),
                 "created_at": w["created_at"],
+                "started_at": w["started_at"],
+                "paused": bool(w["paused"]),
                 "cash": pnl["cash"], "total_value": pnl["total_value"],
                 "pnl": pnl["pnl"], "pnl_pct": pnl["pnl_pct"],
             })
@@ -40,6 +63,8 @@ def get_state():
                 "id": w["id"], "address": w["address"], "name": w["name"],
                 "category": w["category"], "active": bool(w["active"]),
                 "created_at": w["created_at"],
+                "started_at": w["started_at"],
+                "paused": bool(w["paused"]),
                 "cash": None, "total_value": None,
                 "pnl": None, "pnl_pct": None,
             })
@@ -72,6 +97,15 @@ def get_state():
             "last_scan": last_scan["scan_end"] if last_scan else None,
             "total_trades": total_trades,
             "win_rate": None
+        },
+        "risk": {
+            "open_positions": _count_risk(db, "SELECT COUNT(*) FROM positions WHERE our_shares > 0"),
+            "max_positions": MAX_OPEN_POSITIONS,
+            "max_per_market": MAX_PER_MARKET_USD,
+            "daily_loss_limit": DAILY_LOSS_LIMIT,
+            "today_loss": _today_loss(db),
+            "global_threshold": GLOBAL_LOSS_THRESHOLD,
+            "circuit_breaker": _circuit_breaker_active(db),
         },
         "last_scan": last_scan["scan_end"] if last_scan else None
     }

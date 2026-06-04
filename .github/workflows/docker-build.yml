@@ -56,3 +56,4 @@ jobs:
           no-cache: true
           build-args: |
             CACHE_BUST=${{ github.sha }}
+            GIT_SHA=${{ github.sha }}

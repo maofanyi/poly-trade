@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir fastapi 'uvicorn[standard]' polymarket-paper-trad
 
 # Copy application code (excluding what's in .dockerignore)
 ARG CACHE_BUST=0
+ARG GIT_SHA=unknown
+RUN echo $GIT_SHA > /app/git_sha.txt
 COPY . .
 
 # Create data directories for SQLite and pm-trader (persisted via volume)

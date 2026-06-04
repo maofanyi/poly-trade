@@ -133,12 +133,19 @@ def health():
     wallet_count = db.execute("SELECT COUNT(*) FROM wallets WHERE active = 1").fetchone()[0]
     db_path = os.environ.get("DB_PATH", "data/trade.db")
     db_exists = os.path.exists(db_path)
+    try:
+        with open('/app/git_sha.txt') as f:
+            git_sha = f.read().strip()
+    except Exception:
+        git_sha = 'unknown'
+
     return {
         "status": "ok",
         "wallets": wallet_count,
         "db_persisted": db_exists,
         "version": "2.0.0",
-        "phase": "position-mirroring"
+        "phase": "position-mirroring",
+        "git_sha": git_sha
     }
 
 @router.get("/market/{slug:path}/trades")

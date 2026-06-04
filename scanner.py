@@ -50,6 +50,49 @@ def get_cost_basis(db, wallet_id: int, slug: str) -> tuple[float, float]:
         return (row['fill_price'], row['size'] or 0)
     return (0, 0)
 
+def update_position(db, wallet_id: int, trade: dict):
+    """Accumulate whale position from a single trade."""
+    slug = trade.get('slug', '')
+    outcome = trade.get('outcome', '')
+    side = (trade.get('side', 'BUY') or 'BUY').upper()
+    size = float(trade.get('size', 0))
+    ts = str(trade.get('timestamp', ''))
+
+    if not slug or not outcome or size <= 0:
+        return
+
+    row = db.execute(
+        "SELECT whale_shares FROM positions WHERE wallet_id = ? AND slug = ? AND outcome = ?",
+        (wallet_id, slug, outcome)
+    ).fetchone()
+
+    current = row['whale_shares'] if row else 0.0
+
+    if side == 'BUY':
+        new_whale = current + size
+    else:
+        new_whale = max(0.0, current - size)
+
+    db.execute("""
+        INSERT INTO positions (wallet_id, slug, outcome, whale_shares, last_trade_ts)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(wallet_id, slug, outcome) DO UPDATE SET
+            whale_shares = excluded.whale_shares,
+            last_trade_ts = excluded.last_trade_ts,
+            updated_at = datetime('now','localtime')
+    """, (wallet_id, slug, outcome, new_whale, ts))
+    db.commit()
+
+
+def get_whale_positions(db, wallet_id: int) -> list:
+    """Return all current whale positions for a wallet (shares > 0)."""
+    rows = db.execute(
+        "SELECT slug, outcome, whale_shares FROM positions WHERE wallet_id = ? AND whale_shares > 0",
+        (wallet_id,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def _resolve_expired_positions(acct_name: str) -> float:
     """Query Gamma API to resolve expired positions. Returns adjustment to total_value."""
     import json as _json

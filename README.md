@@ -90,7 +90,7 @@ sudo docker run -d \
   -v poly-trade-data:/app/data \
   -e TZ=Asia/Shanghai \
   -e PYTHONUNBUFFERED=1 \
-  -e SCAN_INTERVAL=120 \
+  -e SCAN_INTERVAL=5 \
   mao968/poly-trade:latest
 
 # 5. 检查运行状态
@@ -99,10 +99,14 @@ sudo docker logs -f polymarket-copy-trader
 
 ### 更新部署
 
+使用 commit SHA 标签自动拉取最新版本（绕过 `latest` CDN 缓存）：
+
 ```bash
-sudo docker pull mao968/poly-trade:latest
-sudo docker stop polymarket-copy-trader
-sudo docker rm polymarket-copy-trader
+# 一键部署脚本 — 自动获取 master 最新 commit SHA，拉取对应镜像
+SHA=$(curl -s https://api.github.com/repos/maofanyi/poly-trade/commits/master | grep -m1 sha | cut -d'"' -f4)
+sudo docker pull --platform linux/arm64 mao968/poly-trade:$SHA
+sudo docker stop polymarket-copy-trader 2>/dev/null
+sudo docker rm polymarket-copy-trader 2>/dev/null
 sudo docker run -d \
   --name polymarket-copy-trader \
   --restart unless-stopped \
@@ -110,8 +114,14 @@ sudo docker run -d \
   -v poly-trade-data:/app/data \
   -e TZ=Asia/Shanghai \
   -e PYTHONUNBUFFERED=1 \
-  -e SCAN_INTERVAL=120 \
-  mao968/poly-trade:latest
+  -e SCAN_INTERVAL=5 \
+  mao968/poly-trade:$SHA
+```
+
+部署完成后验证版本：
+```bash
+curl -s http://localhost:8766/api/health | python -m json.tool
+# 返回 "version": "2.0.0", "git_sha": "0219322..."
 ```
 
 ### 资源限制 (可选)

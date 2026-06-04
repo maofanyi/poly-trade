@@ -14,7 +14,7 @@ PM_TRADER = f"pm-trader --data-dir {PM_DATA_DIR}"
 # Trading parameters
 INITIAL_CAPITAL = 500.0
 MAX_TRADES_PER_SCAN = 2
-SCAN_INTERVAL = int(os.environ.get("SCAN_INTERVAL", "120"))
+SCAN_INTERVAL = int(os.environ.get("SCAN_INTERVAL", "5"))
 
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "trade.db"))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -35,3 +35,17 @@ DEFAULT_WALLETS = [
     {"address": "0x07921379f7b31ef93da634b688b2fe36897db778", "name": "ewelmealt", "category": "Sports"},
     {"address": "0x8c0b024c17831a0dde038547b7e791ae6a0d7aa5", "name": "EFFICIENCYEXPERT", "category": "Sports"},
 ]
+
+# Copy trading — position mirroring (Phase A)
+COPY_RATIO = float(os.environ.get("COPY_RATIO", "0.05"))   # 5% of whale notional
+MIN_TRADE_USD = 1.00        # Polymarket platform minimum
+MAX_PER_MARKET_USD = 25.00  # 5% of $500 capital
+MAX_OPEN_POSITIONS = 10     # Concurrent positions cap
+
+# Risk controls
+SLIPPAGE_LIMIT = 0.02       # 2% max slippage
+PRICE_DEVIATION_LIMIT = 0.05  # 5% from whale entry price
+DAILY_LOSS_LIMIT = 25.00    # Per wallet daily loss cap
+WALLET_LOSS_THRESHOLD = 0.25  # 25% cumulative = pause
+CONSECUTIVE_FAILURES = 5    # Pause after N consecutive fails
+GLOBAL_LOSS_THRESHOLD = 0.20  # 20% total portfolio loss = halt

@@ -188,7 +188,7 @@ def migrate():
 
 
 def backfill_positions():
-    """One-time backfill of positions table from existing trade_log."""
+    """One-time backfill of positions table from existing trade_log (last 7 days only)."""
     db = get_db()
     wallets = db.execute("SELECT id FROM wallets WHERE active = 1").fetchall()
     for w in wallets:
@@ -196,6 +196,8 @@ def backfill_positions():
             SELECT slug, outcome, side, fill_price, size, sim_usd, timestamp
             FROM trade_log
             WHERE wallet_id = ? AND status = 'FILLED'
+              AND timestamp >= datetime('now', '-7 days', 'localtime')
+              AND slug NOT IN (SELECT slug FROM closed_markets)
             ORDER BY id ASC
         """, (w['id'],)).fetchall()
         for t in trades:

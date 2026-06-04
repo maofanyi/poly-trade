@@ -31,12 +31,14 @@ async def lifespan(app: FastAPI):
             )
         db.commit()
         print(f"Seeded {len(DEFAULT_WALLETS)} default wallets")
-    # One-time backfill: populate positions table from existing trade_log
-    row = db.execute("SELECT COUNT(*) as cnt FROM positions").fetchone()
-    if row['cnt'] == 0:
-        from database import backfill_positions
-        backfill_positions()
-        print("Backfilled positions from trade_log")
+    # Re-backfill positions from recent trades only (7 days, excluding closed)
+    from database import backfill_positions
+    old_cnt = db.execute("SELECT COUNT(*) FROM positions").fetchone()[0]
+    db.execute("DELETE FROM positions")
+    db.commit()
+    backfill_positions()
+    new_cnt = db.execute("SELECT COUNT(*) FROM positions").fetchone()[0]
+    print(f"Backfill: cleared {old_cnt} old positions, restored {new_cnt} from last 7 days")
     # Ensure alert_config row exists
     db.execute("INSERT OR IGNORE INTO alert_config (id) VALUES (1)")
     db.commit()

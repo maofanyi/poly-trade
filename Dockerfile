@@ -6,6 +6,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir fastapi 'uvicorn[standard]' polymarket-paper-trader websockets
 
 # Copy application code (excluding what's in .dockerignore)
+ARG CACHE_BUST=0
 COPY . .
 
 # Create data directories for SQLite and pm-trader (persisted via volume)

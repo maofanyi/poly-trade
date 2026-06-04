@@ -47,3 +47,5 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/poly-trade:latest
           no-cache: true
+          build-args: |
+            CACHE_BUST=${{ github.sha }}

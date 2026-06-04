@@ -393,54 +393,54 @@ def scan_wallet_position_sync(db, wallet: dict) -> int:
                   timestamp=datetime.now().isoformat())
         new_count += 1
 
-    if new_count > 0:
-        # Compute diffs and execute
-        actions = compute_diffs(db, wallet_id, wallet_name)
-        executed = 0
-        for a in actions:
-            passed, reason = risk_check(db, wallet_name, a['slug'], a['action'],
-                                        a['amount'], 0.5, a.get('outcome', 'Yes'))
-            if not passed:
-                log_trade(db, wallet_id,
-                          txn_hash=f"risk_{a['slug']}_{a['outcome']}_{int(time.time())}",
-                          side=a['action'], size=a['amount'], whale_price=0.5,
-                          sim_usd=0, fill_price=None, status='SKIPPED',
-                          slippage=0, pnl_realized=0,
-                          slug=a['slug'], outcome=a['outcome'],
-                          timestamp=datetime.now().isoformat(),
-                          skip_reason=reason)
-                continue
+    # Always compute diffs and execute — not gated on new_count.
+    # Position mirroring means we sync on every scan, even without new trades.
+    actions = compute_diffs(db, wallet_id, wallet_name)
+    executed = 0
+    for a in actions:
+        passed, reason = risk_check(db, wallet_name, a['slug'], a['action'],
+                                    a['amount'], 0.5, a.get('outcome', 'Yes'))
+        if not passed:
+            log_trade(db, wallet_id,
+                      txn_hash=f"risk_{a['slug']}_{a['outcome']}_{int(time.time())}",
+                      side=a['action'], size=a['amount'], whale_price=0.5,
+                      sim_usd=0, fill_price=None, status='SKIPPED',
+                      slippage=0, pnl_realized=0,
+                      slug=a['slug'], outcome=a['outcome'],
+                      timestamp=datetime.now().isoformat(),
+                      skip_reason=reason)
+            continue
 
-            side_str = 'buy' if a['action'] == 'BUY' else 'sell'
-            result = place_market_order(f"copy-{wallet_name}", a['slug'], a['outcome'],
-                                        side_str, a['amount'])
+        side_str = 'buy' if a['action'] == 'BUY' else 'sell'
+        result = place_market_order(f"copy-{wallet_name}", a['slug'], a['outcome'],
+                                    side_str, a['amount'])
 
-            if result and result.get('ok'):
-                fill_data = result.get('data', {}).get('trade', {})
-                log_trade(db, wallet_id,
-                          txn_hash=f"sync_{a['slug']}_{a['outcome']}_{int(time.time())}",
-                          side=a['action'], size=a['amount'], whale_price=0.5,
-                          sim_usd=a['amount'],
-                          fill_price=fill_data.get('avg_price'),
-                          status='FILLED', slippage=0,
-                          pnl_realized=0, slug=a['slug'], outcome=a['outcome'],
-                          timestamp=datetime.now().isoformat())
-                executed += 1
-            else:
-                err = str(result.get('error', 'no response')) if result else 'no response'
-                status = 'SKIPPED' if ('not found' in err.lower() or 'MARKET_NOT_FOUND' in err) else 'FAILED'
-                reason2 = 'market_not_found' if status == 'SKIPPED' else 'error'
-                log_trade(db, wallet_id,
-                          txn_hash=f"err_{a['slug']}_{a['outcome']}_{int(time.time())}",
-                          side=a['action'], size=a['amount'], whale_price=0.5,
-                          sim_usd=0, fill_price=None, status=status,
-                          slippage=0, pnl_realized=0,
-                          slug=a['slug'], outcome=a['outcome'],
-                          timestamp=datetime.now().isoformat(),
-                          skip_reason=reason2)
+        if result and result.get('ok'):
+            fill_data = result.get('data', {}).get('trade', {})
+            log_trade(db, wallet_id,
+                      txn_hash=f"sync_{a['slug']}_{a['outcome']}_{int(time.time())}",
+                      side=a['action'], size=a['amount'], whale_price=0.5,
+                      sim_usd=a['amount'],
+                      fill_price=fill_data.get('avg_price'),
+                      status='FILLED', slippage=0,
+                      pnl_realized=0, slug=a['slug'], outcome=a['outcome'],
+                      timestamp=datetime.now().isoformat())
+            executed += 1
+        else:
+            err = str(result.get('error', 'no response')) if result else 'no response'
+            status = 'SKIPPED' if ('not found' in err.lower() or 'MARKET_NOT_FOUND' in err) else 'FAILED'
+            reason2 = 'market_not_found' if status == 'SKIPPED' else 'error'
+            log_trade(db, wallet_id,
+                      txn_hash=f"err_{a['slug']}_{a['outcome']}_{int(time.time())}",
+                      side=a['action'], size=a['amount'], whale_price=0.5,
+                      sim_usd=0, fill_price=None, status=status,
+                      slippage=0, pnl_realized=0,
+                      slug=a['slug'], outcome=a['outcome'],
+                      timestamp=datetime.now().isoformat(),
+                      skip_reason=reason2)
 
-        if executed > 0:
-            snapshot_pnl(db, wallet_id, f"copy-{wallet_name}")
+    if executed > 0:
+        snapshot_pnl(db, wallet_id, f"copy-{wallet_name}")
 
     return new_count
 

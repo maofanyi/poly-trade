@@ -148,6 +148,9 @@ def compute_diffs(db, wallet_id: int, wallet_name: str) -> list:
     whale_positions = get_whale_positions(db, wallet_id)
     our_positions = get_portfolio(f"copy-{wallet_name}")
 
+    # Get set of closed markets to skip
+    closed = {r['slug'] for r in db.execute("SELECT slug FROM closed_markets").fetchall()}
+
     # Index our positions by slug|outcome
     ours = {}
     for p in our_positions:
@@ -158,6 +161,8 @@ def compute_diffs(db, wallet_id: int, wallet_name: str) -> list:
 
     # Whale positions -> check what we should hold
     for wp in whale_positions:
+        if wp['slug'] in closed:
+            continue
         key = f"{wp['slug']}|{wp['outcome']}"
         our_shares = ours.get(key, {}).get('shares', 0)
 
@@ -430,6 +435,8 @@ def scan_wallet_position_sync(db, wallet: dict) -> int:
             err = str(result.get('error', 'no response')) if result else 'no response'
             status = 'SKIPPED' if ('not found' in err.lower() or 'MARKET_NOT_FOUND' in err) else 'FAILED'
             reason2 = 'market_not_found' if status == 'SKIPPED' else 'error'
+            # Mark failed/not-found markets as closed so we don't retry dead markets
+            _mark_market_closed(db, a['slug'])
             log_trade(db, wallet_id,
                       txn_hash=f"err_{a['slug']}_{a['outcome']}_{int(time.time())}",
                       side=a['action'], size=a['amount'], whale_price=0.5,
